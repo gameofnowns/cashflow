@@ -207,7 +207,7 @@ interface ExactPayable {
  */
 export async function fetchReceivables(): Promise<{ total: number; items: ExactReceivable[] }> {
   const items = await exactGet<ExactReceivable[]>(
-    "/read/financial/ReceivablesList?$select=AccountName,Amount,InvoiceNumber,InvoiceDate,DueDate,CurrencyCode&$filter=IsFullyPaid eq false"
+    "/read/financial/ReceivablesList?$select=AccountName,Amount,InvoiceNumber,InvoiceDate,DueDate,CurrencyCode"
   );
   const total = items.reduce((sum, item) => sum + (item.Amount || 0), 0);
   return { total, items };
@@ -218,7 +218,7 @@ export async function fetchReceivables(): Promise<{ total: number; items: ExactR
  */
 export async function fetchPayables(): Promise<{ total: number; items: ExactPayable[] }> {
   const items = await exactGet<ExactPayable[]>(
-    "/read/financial/PayablesList?$select=AccountName,Amount,InvoiceNumber,InvoiceDate,DueDate,CurrencyCode&$filter=IsFullyPaid eq false"
+    "/read/financial/PayablesList?$select=AccountName,Amount,InvoiceNumber,InvoiceDate,DueDate,CurrencyCode"
   );
   const total = items.reduce((sum, item) => sum + (item.Amount || 0), 0);
   return { total, items };
@@ -229,27 +229,28 @@ export async function fetchPayables(): Promise<{ total: number; items: ExactPaya
  * Uses the financial reporting balance endpoint.
  */
 export async function fetchBankBalance(): Promise<number> {
-  // Bank accounts are typically in GL category 10 (liquid assets)
-  // Try the ReportingBalance endpoint for the bank accounts
   try {
-    const balances = await exactGet<Array<{ Amount: number }>>(
-      "/financial/GLAccounts?$select=Code,Description,BalanceSide&$filter=startswith(Code,'10') and IsBankAccount eq true&$top=10"
+    // Use the cashflow/Banks endpoint which returns bank account balances directly
+    const banks = await exactGet<Array<{ BankAccountName: string; CurrentBalance: number }>>(
+      "/cashflow/Banks?$select=BankAccountName,CurrentBalance"
     );
-    // If the above doesn't return amounts directly, fall back to reporting balance
-    if (balances.length > 0) {
-      let total = 0;
-      for (const account of balances) {
-        const reportBalance = await exactGet<Array<{ Amount: number }>>(
-          `/financial/ReportingBalance?$select=Amount&$filter=GLAccountCode eq '${(account as unknown as { Code: string }).Code}'&$top=1`
-        );
-        if (reportBalance.length > 0) {
-          total += reportBalance[0].Amount || 0;
-        }
-      }
-      return total;
+    if (banks.length > 0) {
+      return banks.reduce((sum, b) => sum + (b.CurrentBalance || 0), 0);
     }
   } catch {
-    // Fallback: return 0, user can manually enter
+    // Fallback: try ReportingBalance for liquid asset accounts
+    try {
+      const year = new Date().getFullYear();
+      const period = new Date().getMonth() + 1;
+      const balances = await exactGet<Array<{ Amount: number }>>(
+        `/financial/ReportingBalance?$select=Amount&$filter=ReportingYear eq ${year} and ReportingPeriod eq ${period} and GLAccountCode eq '1000'`
+      );
+      if (balances.length > 0) {
+        return balances.reduce((sum, b) => sum + (b.Amount || 0), 0);
+      }
+    } catch {
+      // Return 0, user can manually enter
+    }
   }
   return 0;
 }
