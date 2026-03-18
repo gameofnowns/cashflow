@@ -32,25 +32,25 @@ export async function GET() {
 
   // 1. Check GL accounts that are bank accounts
   results.glBankAccounts = await exactGet(
-    "/financial/GLAccounts?$select=Code,Description,IsBankAccount&$filter=IsBankAccount eq true&$format=json",
+    "/financial/GLAccounts?$select=Code,Description,IsBankAccount&$filter=IsBankAccount eq true",
     auth.token, auth.division!
   );
 
   // 2. Check ReportingBalance for GL code 20 (main bank)
   results.reportingBalance20 = await exactGet(
-    "/financial/ReportingBalance?$select=GLAccountCode,GLAccountDescription,Amount,ReportingYear,ReportingPeriod&$filter=GLAccountCode eq '20'&$format=json",
+    "/financial/ReportingBalance?$select=GLAccountCode,GLAccountDescription,Amount,ReportingYear,ReportingPeriod&$filter=GLAccountCode eq '20'",
     auth.token, auth.division!
   );
 
   // 3. Check PayablesList count and first few items
   results.payablesList = await exactGet(
-    "/read/financial/PayablesList?$select=AccountName,Amount,InvoiceNumber&$top=5&$format=json",
+    "/read/financial/PayablesList?$select=AccountName,Amount,InvoiceNumber&$top=5",
     auth.token, auth.division!
   );
 
   // 4. Try the OutstandingInvoicesPayable endpoint
   results.outstandingPayable = await exactGet(
-    "/purchaseentry/PurchaseEntries?$select=AmountDC,EntryNumber,SupplierName&$filter=Status eq 20&$top=5&$format=json",
+    "/purchaseentry/PurchaseEntries?$select=AmountDC,EntryNumber,SupplierName&$filter=Status eq 20&$top=5",
     auth.token, auth.division!
   );
 
