@@ -152,13 +152,21 @@ function SettingsContent() {
               <p className="text-sm font-medium text-gray-900">Dynamics CRM</p>
               <p className="text-xs text-gray-500">Pipeline deals (90%+)</p>
             </div>
-            <button
-              onClick={syncDynamics}
-              disabled={dynamicsSyncing}
-              className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-            >
-              {dynamicsSyncing ? "Syncing..." : "Sync Now"}
-            </button>
+            <div className="flex items-center gap-2">
+              <a
+                href="/api/auth/dynamics"
+                className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
+              >
+                Connect
+              </a>
+              <button
+                onClick={syncDynamics}
+                disabled={dynamicsSyncing}
+                className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                {dynamicsSyncing ? "Syncing..." : "Sync Now"}
+              </button>
+            </div>
           </div>
           {dynamicsResult && (
             <p className={`text-xs ${dynamicsResult.startsWith("Error") ? "text-red-600" : "text-green-600"}`}>

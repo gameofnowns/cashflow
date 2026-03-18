@@ -4,40 +4,47 @@ const TENANT_ID = process.env.DYNAMICS_TENANT_ID || "";
 const CLIENT_ID = process.env.DYNAMICS_CLIENT_ID || "";
 const CLIENT_SECRET = process.env.DYNAMICS_CLIENT_SECRET || "";
 const DYNAMICS_URL = process.env.DYNAMICS_URL || "https://arktura.crm4.dynamics.com";
+const REDIRECT_URI = process.env.DYNAMICS_REDIRECT_URI || "https://cashflow-lake-kappa.vercel.app/api/auth/dynamics/callback";
 
+const AUTH_URL = `https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.0/authorize`;
 const TOKEN_URL = `https://login.microsoftonline.com/${TENANT_ID}/oauth2/v2.0/token`;
 const API_BASE = `${DYNAMICS_URL}/api/data/v9.2`;
 
-// ─── Authentication ─────────────────────────────────────────
+// ─── OAuth Flow ─────────────────────────────────────────────
 
 /**
- * Get an access token using client credentials flow.
+ * Generate the Dynamics OAuth authorization URL.
  */
-async function getAccessToken(): Promise<string> {
-  // Check for cached token
-  const stored = await prisma.oAuthToken.findUnique({
-    where: { provider: "dynamics" },
+export function getAuthorizationUrl(): string {
+  const params = new URLSearchParams({
+    client_id: CLIENT_ID,
+    redirect_uri: REDIRECT_URI,
+    response_type: "code",
+    scope: `${DYNAMICS_URL}/user_impersonation offline_access`,
   });
+  return `${AUTH_URL}?${params.toString()}`;
+}
 
-  if (stored && new Date() < stored.expiresAt) {
-    return stored.accessToken;
-  }
-
-  // Request new token
+/**
+ * Exchange an authorization code for tokens.
+ */
+export async function exchangeCodeForTokens(code: string): Promise<void> {
   const res = await fetch(TOKEN_URL, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       client_id: CLIENT_ID,
       client_secret: CLIENT_SECRET,
-      scope: `${DYNAMICS_URL}/.default`,
-      grant_type: "client_credentials",
+      grant_type: "authorization_code",
+      redirect_uri: REDIRECT_URI,
+      code,
+      scope: `${DYNAMICS_URL}/user_impersonation offline_access`,
     }),
   });
 
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`Dynamics token failed: ${res.status} ${body}`);
+    throw new Error(`Dynamics token exchange failed: ${res.status} ${body}`);
   }
 
   const data = await res.json();
@@ -47,13 +54,63 @@ async function getAccessToken(): Promise<string> {
     where: { provider: "dynamics" },
     update: {
       accessToken: data.access_token,
-      refreshToken: "",
+      refreshToken: data.refresh_token || "",
       expiresAt,
     },
     create: {
       provider: "dynamics",
       accessToken: data.access_token,
-      refreshToken: "",
+      refreshToken: data.refresh_token || "",
+      expiresAt,
+    },
+  });
+}
+
+/**
+ * Get a valid access token — refreshes automatically if expired.
+ */
+async function getAccessToken(): Promise<string> {
+  const stored = await prisma.oAuthToken.findUnique({
+    where: { provider: "dynamics" },
+  });
+
+  if (!stored) throw new Error("Dynamics not connected. Click Connect first.");
+
+  // If token is still valid, use it
+  if (new Date() < stored.expiresAt) {
+    return stored.accessToken;
+  }
+
+  // Refresh the token
+  if (!stored.refreshToken) {
+    throw new Error("Dynamics token expired and no refresh token. Reconnect.");
+  }
+
+  const res = await fetch(TOKEN_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: CLIENT_ID,
+      client_secret: CLIENT_SECRET,
+      grant_type: "refresh_token",
+      refresh_token: stored.refreshToken,
+      scope: `${DYNAMICS_URL}/user_impersonation offline_access`,
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Dynamics token refresh failed: ${res.status} ${body}`);
+  }
+
+  const data = await res.json();
+  const expiresAt = new Date(Date.now() + data.expires_in * 1000);
+
+  await prisma.oAuthToken.update({
+    where: { provider: "dynamics" },
+    data: {
+      accessToken: data.access_token,
+      refreshToken: data.refresh_token || stored.refreshToken,
       expiresAt,
     },
   });
@@ -227,4 +284,14 @@ export async function syncDynamics(): Promise<{
  */
 export function isConfigured(): boolean {
   return !!(TENANT_ID && CLIENT_ID && CLIENT_SECRET);
+}
+
+/**
+ * Check if Dynamics is connected (has tokens).
+ */
+export async function isConnected(): Promise<boolean> {
+  const token = await prisma.oAuthToken.findUnique({
+    where: { provider: "dynamics" },
+  });
+  return !!token;
 }
