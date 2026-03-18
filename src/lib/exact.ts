@@ -225,7 +225,8 @@ export async function fetchPayables(): Promise<{ total: number; items: ExactPaya
   const items = await exactGet<ExactPayable[]>(
     "/read/financial/PayablesList?$select=AccountName,Amount,InvoiceNumber,InvoiceDate,DueDate,CurrencyCode"
   );
-  const total = items.reduce((sum, item) => sum + (item.Amount || 0), 0);
+  // PayablesList returns negative amounts for outstanding payables — use absolute values
+  const total = items.reduce((sum, item) => sum + Math.abs(item.Amount || 0), 0);
   return { total, items };
 }
 
@@ -234,8 +235,39 @@ export async function fetchPayables(): Promise<{ total: number; items: ExactPaya
  * Uses the financial reporting balance endpoint.
  */
 export async function fetchBankBalance(): Promise<number> {
+  // Try multiple approaches to get bank balance
+
+  // Approach 1: Outstanding bank entries via ReceivablesList/PayablesList difference
+  // (AR - AP gives net position but not bank balance)
+
+  // Approach 2: GL accounts marked as bank accounts
   try {
-    // Use the cashflow/Banks endpoint which returns bank account balances directly
+    const glAccounts = await exactGet<Array<{ Code: string; Description: string }>>(
+      "/financial/GLAccounts?$select=Code,Description&$filter=IsBankAccount eq true"
+    );
+    if (glAccounts.length > 0) {
+      let total = 0;
+      const year = new Date().getFullYear();
+      for (const account of glAccounts) {
+        try {
+          const balances = await exactGet<Array<{ Amount: number; Count: number }>>(
+            `/financial/ReportingBalance?$select=Amount&$filter=ReportingYear eq ${year} and GLAccountCode eq '${account.Code}'`
+          );
+          for (const b of balances) {
+            total += b.Amount || 0;
+          }
+        } catch {
+          // Skip this account
+        }
+      }
+      if (total !== 0) return total;
+    }
+  } catch {
+    // Continue to next approach
+  }
+
+  // Approach 3: Try cashflow/Payments endpoint for bank balance
+  try {
     const banks = await exactGet<Array<{ BankAccountName: string; CurrentBalance: number }>>(
       "/cashflow/Banks?$select=BankAccountName,CurrentBalance"
     );
@@ -243,20 +275,9 @@ export async function fetchBankBalance(): Promise<number> {
       return banks.reduce((sum, b) => sum + (b.CurrentBalance || 0), 0);
     }
   } catch {
-    // Fallback: try ReportingBalance for liquid asset accounts
-    try {
-      const year = new Date().getFullYear();
-      const period = new Date().getMonth() + 1;
-      const balances = await exactGet<Array<{ Amount: number }>>(
-        `/financial/ReportingBalance?$select=Amount&$filter=ReportingYear eq ${year} and ReportingPeriod eq ${period} and GLAccountCode eq '1000'`
-      );
-      if (balances.length > 0) {
-        return balances.reduce((sum, b) => sum + (b.Amount || 0), 0);
-      }
-    } catch {
-      // Return 0, user can manually enter
-    }
+    // Continue
   }
+
   return 0;
 }
 
