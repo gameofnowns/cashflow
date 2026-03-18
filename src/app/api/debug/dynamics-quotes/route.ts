@@ -137,7 +137,31 @@ export async function GET(request: Request) {
       return NextResponse.json(opps);
     }
 
-    return NextResponse.json({ error: "Unknown mode. Use: schema, all-won, products, opportunities" });
+    if (mode === "option-sets") {
+      // Fetch option set metadata for key fields
+      const fields = ["nown_designcoordinationweeks", "nown_manufacturingtimeweeks", "paymenttermscode", "nown_os_projecttype", "nown_os_shippingtype", "nown_os_cratintype", "nown_quotevalidfor"];
+      const results: Record<string, unknown> = {};
+
+      for (const field of fields) {
+        try {
+          const meta = await dynamicsFetch(
+            `/EntityDefinitions(LogicalName='quote')/Attributes(LogicalName='${field}')/Microsoft.Dynamics.CRM.PicklistAttributeMetadata?$select=LogicalName&$expand=OptionSet($select=Options)`,
+            token
+          );
+          const options = meta.OptionSet?.Options?.map((o: { Value: number; Label: { UserLocalizedLabel: { Label: string } } }) => ({
+            value: o.Value,
+            label: o.Label?.UserLocalizedLabel?.Label,
+          }));
+          results[field] = options;
+        } catch (e) {
+          results[field] = { error: e instanceof Error ? e.message : "failed" };
+        }
+      }
+
+      return NextResponse.json(results);
+    }
+
+    return NextResponse.json({ error: "Unknown mode. Use: schema, all-won, products, opportunities, option-sets" });
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Failed" },
