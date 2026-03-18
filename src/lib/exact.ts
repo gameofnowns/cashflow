@@ -149,6 +149,7 @@ async function getValidToken(): Promise<{ token: string; division: string }> {
 
 /**
  * Make an authenticated GET request to the Exact Online REST API.
+ * Returns the first page of results.
  */
 async function exactGet<T>(path: string): Promise<T> {
   const { token, division } = await getValidToken();
@@ -167,8 +168,44 @@ async function exactGet<T>(path: string): Promise<T> {
   }
 
   const json = await res.json();
-  // Exact Online wraps results in { d: { results: [...] } }
+  // Exact Online wraps results in { d: { results: [...] } } or { d: [...] }
   return (json.d?.results ?? json.d ?? json) as T;
+}
+
+/**
+ * Fetch ALL pages from an Exact Online endpoint (handles 60-item pagination).
+ */
+async function exactGetAll<T>(path: string): Promise<T[]> {
+  const { token, division } = await getValidToken();
+  const allItems: T[] = [];
+  let pageUrl: string = `${API_BASE}/${division}${path}`;
+
+  for (;;) {
+    const res = await fetch(pageUrl, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+      },
+    });
+
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`Exact API error ${res.status}: ${body}`);
+    }
+
+    const json = await res.json();
+    const items = json.d?.results ?? json.d ?? [];
+    if (Array.isArray(items)) {
+      allItems.push(...items);
+    }
+
+    // Check for next page
+    const next: string | undefined = json.d?.__next;
+    if (!next) break;
+    pageUrl = next;
+  }
+
+  return allItems;
 }
 
 /**
@@ -208,10 +245,10 @@ interface ExactPayable {
 }
 
 /**
- * Fetch outstanding receivables (AR).
+ * Fetch outstanding receivables (AR) — paginated.
  */
 export async function fetchReceivables(): Promise<{ total: number; items: ExactReceivable[] }> {
-  const items = await exactGet<ExactReceivable[]>(
+  const items = await exactGetAll<ExactReceivable>(
     "/read/financial/ReceivablesList?$select=AccountName,Amount,InvoiceNumber,InvoiceDate,DueDate,CurrencyCode"
   );
   const total = items.reduce((sum, item) => sum + (item.Amount || 0), 0);
@@ -219,13 +256,24 @@ export async function fetchReceivables(): Promise<{ total: number; items: ExactR
 }
 
 /**
- * Fetch outstanding payables (AP).
+ * Fetch outstanding payables (AP) from PurchaseEntries with open status.
+ * Uses PurchaseEntries (Status=20) instead of PayablesList for accurate totals.
+ * Paginates through all pages (Exact returns max 60 per page).
  */
 export async function fetchPayables(): Promise<{ total: number; items: ExactPayable[] }> {
-  const items = await exactGet<ExactPayable[]>(
-    "/read/financial/PayablesList?$select=AccountName,Amount,InvoiceNumber,InvoiceDate,DueDate,CurrencyCode"
+  const entries = await exactGetAll<{ AmountDC: number; SupplierName: string; EntryNumber: number }>(
+    "/purchaseentry/PurchaseEntries?$select=AmountDC,SupplierName,EntryNumber&$filter=Status eq 20"
   );
-  const total = items.reduce((sum, item) => sum + Math.abs(item.Amount || 0), 0);
+  const total = entries.reduce((sum, item) => sum + Math.abs(item.AmountDC || 0), 0);
+  // Map to ExactPayable interface for consistency
+  const items: ExactPayable[] = entries.map(e => ({
+    AccountName: e.SupplierName || "",
+    Amount: Math.abs(e.AmountDC || 0),
+    InvoiceNumber: String(e.EntryNumber || ""),
+    InvoiceDate: "",
+    DueDate: "",
+    CurrencyCode: "EUR",
+  }));
   return { total, items };
 }
 
@@ -234,22 +282,37 @@ export async function fetchPayables(): Promise<{ total: number; items: ExactPaya
  * Uses the financial reporting balance endpoint.
  */
 export async function fetchBankBalance(): Promise<number> {
-  // NOWN bank accounts are GL codes 20-26
-  // The "Current balance" in Exact is cumulative across ALL years
-  // ReportingBalance per year only shows that year's movements
-  // We need to sum across all years, or use a different approach
+  // NOWN bank/liquid asset GL accounts are in the 10xx-11xx range:
+  // 1000 = ING Creditcard
+  // 1100 = Main ING EUR operations (assumed)
+  // 1101 = JP Morgan Chase USD
+  // 1103 = ING Bank GBP
+  // 1104 = Pleo Wallet
+  // etc.
+  // Sum ReportingBalance across ALL years for cumulative balance
 
-  // Approach: Use financial/BalanceByGLAccountAndCostCenter which gives cumulative balances
-  // Or sum ReportingBalance across all years for bank accounts
   try {
+    // First, find all GL accounts in the bank/liquid assets range
+    const glAccounts = await exactGetAll<{ Code: string; Description: string }>(
+      "/financial/GLAccounts?$select=Code,Description&$filter=startswith(Code,'10') or startswith(Code,'11')"
+    );
+
+    // Filter to likely bank/cash accounts (exclude debtors 1200, VAT 15xx, etc.)
+    const bankCodes = glAccounts
+      .filter(a => {
+        const code = parseInt(a.Code);
+        return code >= 1000 && code <= 1199; // 10xx and 11xx only
+      })
+      .map(a => a.Code);
+
+    if (bankCodes.length === 0) return 0;
+
     let total = 0;
-    for (const code of ["20", "21", "22", "23", "24", "25", "26"]) {
+    for (const code of bankCodes) {
       try {
-        // Get ALL reporting balances across all years for this GL account
-        const balances = await exactGet<Array<{ Amount: number; ReportingYear: number; ReportingPeriod: number }>>(
-          `/financial/ReportingBalance?$select=Amount,ReportingYear,ReportingPeriod&$filter=GLAccountCode eq '${code}'`
+        const balances = await exactGetAll<{ Amount: number }>(
+          `/financial/ReportingBalance?$select=Amount&$filter=GLAccountCode eq '${code}'`
         );
-        // Sum all periods across all years = cumulative balance
         for (const b of balances) {
           total += b.Amount || 0;
         }
@@ -259,10 +322,8 @@ export async function fetchBankBalance(): Promise<number> {
     }
     return total;
   } catch {
-    // Return 0
+    return 0;
   }
-
-  return 0;
 }
 
 /**
