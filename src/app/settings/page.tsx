@@ -57,8 +57,9 @@ function SettingsContent() {
       if (!res.ok) {
         setDynamicsResult(`Error: ${data.error}`);
       } else {
+        const errMsg = data.errors?.length ? ` — Errors: ${data.errors.join("; ")}` : "";
         setDynamicsResult(
-          `Synced ${data.synced} pipeline deals of ${data.total} (${data.skipped} skipped)${data.errors?.length ? `, ${data.errors.length} errors` : ""}`
+          `Synced ${data.synced} pipeline deals of ${data.total} (${data.skipped} skipped)${errMsg}`
         );
       }
     } catch (e) {
