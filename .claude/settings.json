@@ -32,7 +32,19 @@
       "Bash(npx vercel:*)",
       "Bash(git init:*)",
       "Bash(git remote:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git rm:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(curl -s -X POST \"https://start.exactonline.nl/api/oauth2/token\" -H \"Content-Type: application/x-www-form-urlencoded\" -d \"client_id=7c6abaa6-e583-44de-b6d6-09f01cc47f14\" -d \"client_secret=oo82R4kNNHWp\" -d \"grant_type=client_credentials\")",
+      "Bash(printf 'oo82R4kNNHWp')",
+      "Bash(printf 'd2c90089-a37b-40ee-aed8-eb054b9cd69b')",
+      "Bash(printf 'tUyMxnpg9PPB')",
+      "Bash(printf '90102977-28a5-49ec-b46e-69b10fa775d5')",
+      "Bash(printf 'fZUVPQAfrPqp')",
+      "Bash(printf 'postgresql://neondb_owner:npg_tu0p6Kyrwxiz@ep-lingering-wave-adapj9qt-pooler.c-2.us-east-1.aws.neon.tech/neondb?channel_binding=require&sslmode=require')",
+      "Bash(DATABASE_URL=\"postgresql://neondb_owner:npg_tu0p6Kyrwxiz@ep-lingering-wave-adapj9qt-pooler.c-2.us-east-1.aws.neon.tech/neondb?channel_binding=require&sslmode=require\" npx prisma migrate dev --name init_postgres)",
+      "Bash(curl -s https://cashflow-lake-kappa.vercel.app/api/forecast)"
     ]
   }
 }
