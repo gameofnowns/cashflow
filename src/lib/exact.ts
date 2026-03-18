@@ -222,11 +222,12 @@ export async function fetchReceivables(): Promise<{ total: number; items: ExactR
  * Fetch outstanding payables (AP).
  */
 export async function fetchPayables(): Promise<{ total: number; items: ExactPayable[] }> {
-  const items = await exactGet<ExactPayable[]>(
-    "/read/financial/PayablesList?$select=AccountName,Amount,InvoiceNumber,InvoiceDate,DueDate,CurrencyCode"
+  // Try PayablesList first — use AmountDC (domestic currency) for consistent totals
+  const items = await exactGet<(ExactPayable & { AmountDC?: number })[]>(
+    "/read/financial/PayablesList?$select=AccountName,Amount,AmountDC,InvoiceNumber,InvoiceDate,DueDate,CurrencyCode"
   );
-  // PayablesList returns negative amounts for outstanding payables — use absolute values
-  const total = items.reduce((sum, item) => sum + Math.abs(item.Amount || 0), 0);
+  // Use AmountDC if available, fall back to Amount. Use absolute values.
+  const total = items.reduce((sum, item) => sum + Math.abs(item.AmountDC ?? item.Amount ?? 0), 0);
   return { total, items };
 }
 
@@ -235,47 +236,53 @@ export async function fetchPayables(): Promise<{ total: number; items: ExactPaya
  * Uses the financial reporting balance endpoint.
  */
 export async function fetchBankBalance(): Promise<number> {
-  // Try multiple approaches to get bank balance
-
-  // Approach 1: Outstanding bank entries via ReceivablesList/PayablesList difference
-  // (AR - AP gives net position but not bank balance)
-
-  // Approach 2: GL accounts marked as bank accounts
+  // NOWN bank accounts are GL codes 20-26
+  // Sum up the ReportingBalance for all bank GL accounts
   try {
-    const glAccounts = await exactGet<Array<{ Code: string; Description: string }>>(
-      "/financial/GLAccounts?$select=Code,Description&$filter=IsBankAccount eq true"
+    const year = new Date().getFullYear();
+    // Fetch all reporting balances for bank accounts (GL codes starting with '2' in the 20-29 range)
+    const balances = await exactGet<Array<{
+      GLAccountCode: string;
+      GLAccountDescription: string;
+      Amount: number;
+      ReportingPeriod: number;
+    }>>(
+      `/financial/ReportingBalance?$select=GLAccountCode,GLAccountDescription,Amount,ReportingPeriod&$filter=ReportingYear eq ${year} and substringof('Bank',GLAccountDescription) eq true`
     );
-    if (glAccounts.length > 0) {
-      let total = 0;
-      const year = new Date().getFullYear();
-      for (const account of glAccounts) {
-        try {
-          const balances = await exactGet<Array<{ Amount: number; Count: number }>>(
-            `/financial/ReportingBalance?$select=Amount&$filter=ReportingYear eq ${year} and GLAccountCode eq '${account.Code}'`
-          );
-          for (const b of balances) {
-            total += b.Amount || 0;
-          }
-        } catch {
-          // Skip this account
+    if (balances.length > 0) {
+      // Get the latest period's balance for each account
+      const latestByAccount = new Map<string, number>();
+      for (const b of balances) {
+        const existing = latestByAccount.get(b.GLAccountCode);
+        if (existing === undefined || b.ReportingPeriod > 0) {
+          latestByAccount.set(b.GLAccountCode, b.Amount || 0);
         }
       }
-      if (total !== 0) return total;
+      return Array.from(latestByAccount.values()).reduce((sum, amt) => sum + amt, 0);
     }
   } catch {
-    // Continue to next approach
+    // Fallback approach
   }
 
-  // Approach 3: Try cashflow/Payments endpoint for bank balance
+  // Fallback: query each known bank account directly
   try {
-    const banks = await exactGet<Array<{ BankAccountName: string; CurrentBalance: number }>>(
-      "/cashflow/Banks?$select=BankAccountName,CurrentBalance"
-    );
-    if (banks.length > 0) {
-      return banks.reduce((sum, b) => sum + (b.CurrentBalance || 0), 0);
+    const year = new Date().getFullYear();
+    let total = 0;
+    for (const code of ["20", "21", "22", "23", "24", "25", "26"]) {
+      try {
+        const balances = await exactGet<Array<{ Amount: number; ReportingPeriod: number }>>(
+          `/financial/ReportingBalance?$select=Amount,ReportingPeriod&$filter=ReportingYear eq ${year} and GLAccountCode eq '${code}'&$orderby=ReportingPeriod desc&$top=1`
+        );
+        if (balances.length > 0) {
+          total += balances[0].Amount || 0;
+        }
+      } catch {
+        // Skip this account
+      }
     }
+    return total;
   } catch {
-    // Continue
+    // Return 0
   }
 
   return 0;
