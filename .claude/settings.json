@@ -1,0 +1,38 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx create-next-app@latest /Users/jasongillette/Library/CloudStorage/OneDrive-Nown/cashflow --typescript --tailwind --eslint --app --src-dir --import-alias \"@/*\" --use-npm --no-turbopack --yes)",
+      "Bash(npm install:*)",
+      "Bash(npx prisma:*)",
+      "Bash(npm run:*)",
+      "Bash(npx tsx:*)",
+      "Bash(ls -la /Users/jasongillette/Library/CloudStorage/OneDrive-Nown/cashflow/src/generated/prisma/index*)",
+      "Bash(npx next:*)",
+      "Bash(ls /Users/jasongillette/Library/CloudStorage/OneDrive-Nown/cashflow/node_modules/next/dist/server/require-hook*)",
+      "Bash(curl -s -H \"Authorization: pk_14706523_GRS6TTACAFV7LOMG29268VDHE4QLYD6P\" \"https://api.clickup.com/api/v2/list/86mkb-19372\")",
+      "Bash(python3 -m json.tool)",
+      "Bash(curl -s -H \"Authorization: pk_14706523_GRS6TTACAFV7LOMG29268VDHE4QLYD6P\" \"https://api.clickup.com/api/v2/space/12841149/list?archived=false\")",
+      "Bash(curl -s -H \"Authorization: pk_14706523_GRS6TTACAFV7LOMG29268VDHE4QLYD6P\" \"https://api.clickup.com/api/v2/list/84391559/task?page=0&limit=1&include_closed=false\")",
+      "Bash(python3 -c \":*)",
+      "Bash(curl -s -H \"Authorization: pk_14706523_GRS6TTACAFV7LOMG29268VDHE4QLYD6P\" \"https://api.clickup.com/api/v2/list/84391559\")",
+      "Bash(curl -s -H \"Authorization: pk_14706523_GRS6TTACAFV7LOMG29268VDHE4QLYD6P\" \"https://api.clickup.com/api/v2/list/84391559/task?page=0&limit=5&include_closed=false&subtasks=false\")",
+      "Bash(curl -s -L -H \"Authorization: pk_14706523_GRS6TTACAFV7LOMG29268VDHE4QLYD6P\" \"https://t8606315.p.clickup-attachments.com/t8606315/10395eab-02e8-4433-a936-7317766dc420/doc12145620260313111407.pdf\" -o /tmp/sample_quotation.pdf)",
+      "Read(//tmp/**)",
+      "Bash(node -e \":*)",
+      "Bash(brew list:*)",
+      "Bash(pdftoppm -png -r 200 -f 2 -l 2 /tmp/sample_quotation.pdf /tmp/quotation_page)",
+      "Bash(tesseract /tmp/quotation_page-02.png -)",
+      "Read(//private/tmp/**)",
+      "Bash(tesseract /tmp/quotation_page-2.png -)",
+      "Bash(tesseract /tmp/quotation_page-2.png /tmp/ocr_result)",
+      "Bash(cp /tmp/quotation_page-2.png /tmp/qpage2.png)",
+      "Bash(tesseract /tmp/qpage2.png stdout)",
+      "Bash(tesseract qpage2.png stdout)",
+      "Bash(vercel --version)",
+      "Bash(npx vercel:*)",
+      "Bash(git init:*)",
+      "Bash(git remote:*)",
+      "Bash(git add:*)"
+    ]
+  }
+}

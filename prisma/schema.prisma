@@ -1,0 +1,77 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Project {
+  id             String   @id @default(uuid())
+  externalId     String   @map("external_id")
+  source         String   // 'clickup' | 'dynamics' | 'manual'
+  name           String
+  projectType    String   @map("project_type") // 'X' | 'Y' | 'Z'
+  confidenceTier String   @map("confidence_tier") // 'won' | 'committed' | 'pipeline'
+  totalValue     Float?   @map("total_value")
+  status         String?
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  milestones PaymentMilestone[]
+
+  @@unique([externalId, source])
+  @@map("projects")
+}
+
+model PaymentMilestone {
+  id           String   @id @default(uuid())
+  projectId    String   @map("project_id")
+  amount       Float
+  expectedDate DateTime @map("expected_date")
+  status       String   @default("pending") // 'pending' | 'invoiced' | 'received'
+  invoiceId    String?  @map("invoice_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("payment_milestones")
+}
+
+model FinancialSnapshot {
+  id           String   @id @default(uuid())
+  snapshotDate DateTime @map("snapshot_date")
+  bankBalance  Float?   @map("bank_balance")
+  totalAr      Float?   @map("total_ar")
+  totalAp      Float?   @map("total_ap")
+  source       String   @default("exact")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@map("financial_snapshots")
+}
+
+model OAuthToken {
+  id           String   @id @default(uuid())
+  provider     String   @unique // 'exact' | 'dynamics'
+  accessToken  String   @map("access_token")
+  refreshToken String   @map("refresh_token")
+  expiresAt    DateTime @map("expires_at")
+  division     String?  // Exact Online division code
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("oauth_tokens")
+}
+
+model OverheadBudget {
+  id        String   @id @default(uuid())
+  month     DateTime @unique
+  amount    Float
+  notes     String?
+  updatedBy String?  @map("updated_by")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("overhead_budget")
+}
