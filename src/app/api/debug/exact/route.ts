@@ -31,36 +31,35 @@ export async function GET() {
 
   const results: Record<string, unknown> = {};
 
-  // 1. Find GL accounts starting with '1' (liquid assets / bank in Dutch accounting)
-  results.glAccounts1xxx = await exactGet(
-    "/financial/GLAccounts?$select=Code,Description&$filter=startswith(Code,'1')&$top=30",
+  // 1. cashflow/Banks — get ALL properties to find the balance field
+  results.banksAllProps = await exactGet(
+    "/cashflow/Banks?$top=5",
     auth.token, auth.division!
   );
 
-  // 2. Find GL accounts starting with '0' (in case banks are there)
-  results.glAccounts0xxx = await exactGet(
-    "/financial/GLAccounts?$select=Code,Description&$filter=startswith(Code,'0')&$top=20",
+  // 2. Try financial/OutstandingInvoicesPayable for AP
+  results.outstandingPayable = await exactGet(
+    "/financial/AgingPayablesList?$select=AgeGroup,Amount&$top=10",
     auth.token, auth.division!
   );
 
-  // 3. Try financial/BankAccounts endpoint
-  results.bankAccounts = await exactGet(
-    "/cashflow/Banks?$select=BankAccountName,CurrentBalance",
+  // 3. ReportingBalance for just GL 1100 (likely main bank)
+  results.rb1100 = await exactGet(
+    "/financial/ReportingBalance?$select=GLAccountCode,GLAccountDescription,Amount,ReportingYear,ReportingPeriod&$filter=GLAccountCode eq '1100'&$top=10",
     auth.token, auth.division!
   );
 
-  // 4. Get AP total from PurchaseEntries with open status (Status 20 = open)
-  results.purchaseEntriesOpen = await exactGet(
-    "/purchaseentry/PurchaseEntries?$select=AmountDC&$filter=Status eq 20",
+  // 4. Try financial/FinancialPeriods to see current period
+  results.currentPeriod = await exactGet(
+    "/financial/FinancialPeriods?$select=FinYear,FinPeriod&$filter=Current eq true",
     auth.token, auth.division!
   );
 
-  // Calculate AP from purchase entries
-  const peData = results.purchaseEntriesOpen as { data: Array<{ AmountDC: number }> };
-  if (Array.isArray(peData.data)) {
-    const totalAP = peData.data.reduce((sum: number, item: { AmountDC: number }) => sum + Math.abs(item.AmountDC || 0), 0);
-    results.purchaseEntriesTotalCalculated = { count: peData.data.length, total: totalAP };
-  }
+  // 5. Get AgingReceivablesList for comparison
+  results.agingReceivables = await exactGet(
+    "/financial/AgingReceivablesList?$select=AgeGroup,Amount&$top=10",
+    auth.token, auth.division!
+  );
 
   return NextResponse.json(results);
 }
