@@ -11,8 +11,11 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Skip debug endpoints
+  // Skip debug endpoints and pages
   if (request.nextUrl.pathname.startsWith("/api/debug/")) {
+    return NextResponse.next();
+  }
+  if (request.nextUrl.pathname.startsWith("/quote-alignment")) {
     return NextResponse.next();
   }
 

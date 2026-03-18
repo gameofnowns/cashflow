@@ -1,0 +1,845 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NOWN — Quote Alignment</title>
+  <style>
+    :root {
+      --bg:         #EAE6DF;
+      --ink:        #1A1814;
+      --sub:        #6B6560;
+      --dim:        #A09890;
+      --ghost:      #C8C2B8;
+      --orange:     #FE6337;
+      --blue:       #0086D5;
+      --green:      #82D780;
+      --yellow:     #FAE791;
+      --terracotta: #BD6A55;
+      --sage:       #8F9A8F;
+      --blue-grey:  #D8E1EB;
+      --bronze:     #887550;
+      --blush:      #F7E5DF;
+      --grid:       1px solid #1A1814;
+      --font:       'Replica', 'Helvetica Neue', Arial, sans-serif;
+      --mono:       'SF Mono', 'Fira Code', Consolas, monospace;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--ink);
+    }
+
+    /* ── HEADER ───────────────────────────────────── */
+    .header {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      padding: 10px 18px;
+      border-bottom: var(--grid);
+    }
+
+    .header-left {
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+    }
+
+    .logo {
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 3px;
+    }
+
+    .page-title {
+      font-size: 28px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 6px;
+      line-height: 0.70;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .btn {
+      font-family: var(--font);
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      padding: 8px 16px;
+      background: var(--ink);
+      color: var(--bg);
+      border: none;
+      border-radius: 0;
+      cursor: pointer;
+      transition: background 150ms, color 150ms;
+    }
+
+    .btn:hover { background: var(--orange); color: #fff; }
+    .btn:disabled { background: var(--ghost); color: var(--dim); cursor: not-allowed; }
+
+    .timestamp {
+      font-size: 7px;
+      font-weight: 300;
+      letter-spacing: 1.5px;
+      line-height: 1.6;
+      color: var(--dim);
+      text-transform: lowercase;
+    }
+
+    /* ── SUBTITLE ─────────────────────────────────── */
+    .subtitle-bar {
+      padding: 8px 18px;
+      border-bottom: var(--grid);
+    }
+
+    .subtitle {
+      font-size: 9px;
+      font-weight: 300;
+      letter-spacing: 0.3px;
+      line-height: 1.7;
+      color: var(--sub);
+      text-transform: lowercase;
+    }
+
+    /* ── KPI SUMMARY ──────────────────────────────── */
+    .kpi-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      border-bottom: var(--grid);
+    }
+
+    .kpi-card {
+      padding: 14px 18px;
+      border-right: var(--grid);
+    }
+
+    .kpi-card:last-child { border-right: none; }
+
+    .kpi-label {
+      font-size: 7.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 3.5px;
+      line-height: 1.4;
+      color: var(--sub);
+      margin-bottom: 6px;
+    }
+
+    .kpi-value {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      line-height: 0.75;
+      color: var(--ink);
+      font-family: var(--mono);
+      margin-bottom: 6px;
+    }
+
+    .kpi-caption {
+      font-size: 7px;
+      font-weight: 300;
+      letter-spacing: 1.5px;
+      line-height: 1.6;
+      color: var(--dim);
+      text-transform: lowercase;
+    }
+
+    /* ── SECTION HEADER ───────────────────────────── */
+    .section-header {
+      padding: 14px 18px;
+      border-bottom: var(--grid);
+    }
+
+    .section-title {
+      font-size: 18px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 4px;
+      line-height: 0.75;
+    }
+
+    /* ── QUOTE CARD ───────────────────────────────── */
+    .quote-card {
+      border-bottom: var(--grid);
+    }
+
+    .quote-header {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: start;
+      padding: 14px 18px;
+      border-bottom: var(--grid);
+    }
+
+    .quote-name {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 2.5px;
+      line-height: 1.3;
+    }
+
+    .quote-meta {
+      font-size: 7px;
+      font-weight: 300;
+      letter-spacing: 1.5px;
+      line-height: 1.6;
+      color: var(--dim);
+      text-transform: lowercase;
+      margin-top: 4px;
+    }
+
+    .quote-badges {
+      display: flex;
+      gap: 1px;
+    }
+
+    .badge {
+      font-size: 7.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      padding: 4px 10px;
+      border: var(--grid);
+    }
+
+    .badge-type { background: var(--ink); color: var(--bg); }
+    .badge-matched { background: var(--green); color: var(--ink); }
+    .badge-unmatched { background: var(--blush); color: var(--terracotta); }
+
+    /* ── DATA GRID ────────────────────────────────── */
+    .data-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .data-panel {
+      padding: 14px 18px;
+      border-bottom: var(--grid);
+    }
+
+    .data-panel:first-child {
+      border-right: var(--grid);
+    }
+
+    .panel-label {
+      font-size: 7.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 3.5px;
+      line-height: 1.4;
+      color: var(--sub);
+      margin-bottom: 10px;
+    }
+
+    .data-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      padding: 3px 0;
+      border-bottom: 1px solid var(--ghost);
+    }
+
+    .data-row:last-child { border-bottom: none; }
+
+    .data-key {
+      font-size: 7.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: var(--dim);
+    }
+
+    .data-val {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      color: var(--ink);
+      font-family: var(--mono);
+      text-align: right;
+    }
+
+    .data-val.match { color: var(--green); }
+    .data-val.mismatch { color: var(--terracotta); }
+    .data-val.missing {
+      color: var(--ghost);
+      font-weight: 300;
+      font-family: var(--font);
+      font-style: normal;
+      text-transform: lowercase;
+      font-size: 9px;
+      letter-spacing: 0.3px;
+    }
+
+    .data-val.needs-sync {
+      color: var(--terracotta);
+      font-weight: 300;
+      font-family: var(--font);
+      font-size: 9px;
+      letter-spacing: 0.3px;
+      text-transform: lowercase;
+    }
+
+    /* ── PAYMENT TERMS BAR ────────────────────────── */
+    .terms-bar {
+      padding: 10px 18px;
+      border-bottom: var(--grid);
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+    }
+
+    .terms-key {
+      font-size: 7.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 3.5px;
+      color: var(--dim);
+      flex-shrink: 0;
+    }
+
+    .terms-val {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      color: var(--blue);
+    }
+
+    /* ── MILESTONE TABLE ──────────────────────────── */
+    .milestone-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .milestone-table thead {
+      background: var(--ink);
+    }
+
+    .milestone-table th {
+      font-size: 7.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 3.5px;
+      line-height: 1.4;
+      color: var(--bg);
+      padding: 10px 14px;
+      text-align: left;
+      border-right: 1px solid var(--sub);
+    }
+
+    .milestone-table th:last-child { border-right: none; }
+    .milestone-table th.right { text-align: right; }
+
+    .milestone-table td {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      padding: 10px 14px;
+      border-bottom: var(--grid);
+      border-right: var(--grid);
+      color: var(--ink);
+    }
+
+    .milestone-table td:last-child { border-right: none; }
+    .milestone-table td.right { text-align: right; font-family: var(--mono); }
+    .milestone-table td.dim { color: var(--dim); font-weight: 300; font-size: 9px; letter-spacing: 0.3px; text-transform: lowercase; }
+
+    .milestone-table tr:hover td {
+      background: var(--orange);
+      color: #fff;
+      transition: background 150ms, color 150ms;
+    }
+
+    .milestone-table tr:hover td.dim { color: rgba(255,255,255,0.7); }
+
+    .trigger-tag {
+      display: inline-block;
+      font-size: 7.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      padding: 2px 8px;
+      border: var(--grid);
+      background: transparent;
+    }
+
+    .trigger-start { background: var(--blue-grey); }
+    .trigger-shops { background: var(--yellow); }
+    .trigger-approval { background: var(--blush); }
+    .trigger-mid-manufacture { background: var(--sage); color: #fff; }
+    .trigger-pre-ship { background: var(--green); }
+    .trigger-net { background: var(--bronze); color: var(--bg); }
+
+    .status-tag {
+      display: inline-block;
+      font-size: 7.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      padding: 2px 8px;
+      border: var(--grid);
+    }
+
+    .status-received { background: var(--green); }
+    .status-invoiced { background: var(--yellow); }
+    .status-pending { background: transparent; }
+
+    /* ── TIMELINE ──────────────────────────────────── */
+    .timeline-section {
+      padding: 14px 18px;
+      border-bottom: var(--grid);
+    }
+
+    .timeline-container {
+      position: relative;
+      height: 110px;
+      margin-top: 8px;
+    }
+
+    .timeline-axis {
+      position: absolute;
+      bottom: 24px;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: var(--ink);
+    }
+
+    .timeline-tick {
+      position: absolute;
+      bottom: 8px;
+      font-size: 7.5px;
+      font-weight: 300;
+      letter-spacing: 0.5px;
+      color: var(--dim);
+      transform: translateX(-50%);
+    }
+
+    .timeline-tick::before {
+      content: '';
+      position: absolute;
+      bottom: 10px;
+      left: 50%;
+      width: 1px;
+      height: 6px;
+      background: var(--ink);
+    }
+
+    .timeline-phase {
+      position: absolute;
+      top: 6px;
+      height: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 7.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      border: var(--grid);
+      min-width: 16px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      padding: 0 6px;
+    }
+
+    .phase-design { background: var(--yellow); color: var(--ink); }
+    .phase-mfg { background: var(--blue); color: #fff; }
+
+    .timeline-milestone {
+      position: absolute;
+      top: 32px;
+      transform: translateX(-50%);
+      text-align: center;
+    }
+
+    .milestone-dot {
+      width: 6px;
+      height: 6px;
+      margin: 0 auto 3px;
+      border: 1px solid var(--ink);
+    }
+
+    .dot-dynamics { background: var(--ink); }
+    .dot-clickup { background: var(--green); }
+    .dot-received { background: var(--green); }
+    .dot-invoiced { background: var(--yellow); }
+    .dot-pending { background: var(--bg); }
+
+    .milestone-amt {
+      font-size: 7.5px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      color: var(--ink);
+      font-family: var(--mono);
+    }
+
+    .milestone-lbl {
+      font-size: 7px;
+      font-weight: 300;
+      letter-spacing: 0.5px;
+      color: var(--dim);
+      line-height: 1.2;
+      max-width: 70px;
+    }
+
+    /* ── LEGEND ────────────────────────────────────── */
+    .legend {
+      display: flex;
+      gap: 16px;
+      padding: 8px 18px;
+      border-bottom: var(--grid);
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 7.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: var(--dim);
+    }
+
+    .legend-dot {
+      width: 8px;
+      height: 8px;
+      border: 1px solid var(--ink);
+    }
+
+    .empty-panel {
+      padding: 14px 18px;
+      text-align: center;
+      font-size: 9px;
+      font-weight: 300;
+      color: var(--dim);
+      letter-spacing: 0.3px;
+      text-transform: lowercase;
+    }
+
+    @media (max-width: 900px) {
+      .data-grid { grid-template-columns: 1fr; }
+      .data-panel:first-child { border-right: none; }
+      .kpi-row { grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="header-left">
+      <span class="logo">NOWN</span>
+      <span class="page-title">QUOTE ALIGNMENT</span>
+    </div>
+    <div class="header-right">
+      <select id="quoteCount" style="font-family:var(--font);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:2px;padding:8px 12px;background:var(--bg);border:var(--grid);color:var(--ink);border-radius:0;cursor:pointer;">
+        <option value="3">3 quotes</option>
+        <option value="5" selected>5 quotes</option>
+        <option value="10">10 quotes</option>
+      </select>
+      <button class="btn" id="loadBtn" onclick="loadData()">REFRESH</button>
+      <span class="timestamp" id="ts"></span>
+    </div>
+  </div>
+
+  <!-- SUBTITLE -->
+  <div class="subtitle-bar">
+    <span class="subtitle">closed won opportunities from dynamics crm — linked quotes decoded — clickup cross-reference — payment milestone projection</span>
+  </div>
+
+  <!-- KPI ROW -->
+  <div class="kpi-row" id="kpis" style="display:none;"></div>
+
+  <!-- CONTENT -->
+  <div id="content">
+    <div class="empty-panel" style="padding:40px;">loading closed won opportunities from dynamics...</div>
+  </div>
+
+<script>
+  function fmt(n) {
+    if (n == null) return '\u2014';
+    const abs = Math.abs(n);
+    const s = abs.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    return (n < 0 ? '- ' : '') + 'EUR ' + s;
+  }
+
+  function fmtDate(iso) {
+    if (!iso) return '\u2014';
+    const d = new Date(iso);
+    return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }).toLowerCase();
+  }
+
+  function shortDate(iso) {
+    if (!iso) return '\u2014';
+    const d = new Date(iso);
+    return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }).toLowerCase();
+  }
+
+  function daysBetween(a, b) {
+    return Math.round((new Date(b) - new Date(a)) / (86400000));
+  }
+
+  function typeFromName(name) {
+    const m = name?.match(/\d{2}-([XYZ])\d/);
+    return m ? m[1] : null;
+  }
+
+  const EMBEDDED_DATA = {"_info":"5 most recent Closed Won opportunities with linked quotes + ClickUp alignment","generatedAt":"2026-03-18T21:29:53.316Z","quotes":[{"quoteid":"7e60dd54-6ea6-454e-a9c6-12a8b9e7ec7a","opportunityName":"26-Y2666 LESC FR_LeScott_Y_Atmo Adapt. SoftGrid","name":"26-Y2666 LESC FR_LeScott_Y_Atmo Adapt. SoftGrid","quotenumber":"\u2014","createdon":"2026-03-13","projectType":null,"designWeeks":null,"manufacturingWeeks":null,"totalLeadWeeks":null,"paymentTermsCode":null,"paymentTermsText":null,"manualPaymentTerms":null,"totalPrice":24690.57,"subtotal":null,"crating":null,"shipping":null,"opportunityId":"7e60dd54-6ea6-454e-a9c6-12a8b9e7ec7a","milestones":[{"label":"1st Payment","percentage":0.5,"amount":12345.29,"trigger":"start","estimatedDate":"2026-03-20T00:00:00.000Z","reasoning":"Quote signed \u2192 invoice ~1 week"},{"label":"2nd Payment","percentage":0.5,"amount":12345.29,"trigger":"pre-ship","estimatedDate":"2026-05-08T00:00:00.000Z","reasoning":"Full lead time: 0wk design + 8wk mfg"}],"clickup":{"matched":true,"jobNo":"26-Y2666","projectName":"LESC | FR_LeScott_Y_Atmo Adapt. SoftGrid","status":"3 - design","leadtimeWeeks":null,"productionEta":null,"prodFinished":null,"shopsStatus":null,"approvedShops":null,"paymentTerms":null,"milestones":[{"label":null,"amount":13645.285,"expectedDate":"2026-03-17T03:00:00.000Z","status":"received"},{"label":null,"amount":13645.285,"expectedDate":"2026-06-15T00:00:00.000Z","status":"pending"}]}},{"quoteid":"09bc97a3-b413-46ba-a346-39683d92c63a","opportunityName":"26-X2667 MOOD UK_UK_Moodys Level 7 Change_InfiKnit","name":"26-X2667 MOOD UK_UK_Moodys Level 7 Change_InfiKnit","quotenumber":"\u2014","createdon":"2026-03-13","projectType":null,"designWeeks":null,"manufacturingWeeks":null,"totalLeadWeeks":null,"paymentTermsCode":null,"paymentTermsText":null,"manualPaymentTerms":null,"totalPrice":5465.5,"subtotal":null,"crating":null,"shipping":null,"opportunityId":"09bc97a3-b413-46ba-a346-39683d92c63a","milestones":[{"label":"1st Payment","percentage":0.5,"amount":2732.75,"trigger":"start","estimatedDate":"2026-03-20T00:00:00.000Z","reasoning":"Quote signed \u2192 invoice ~1 week"},{"label":"2nd Payment","percentage":0.5,"amount":2732.75,"trigger":"pre-ship","estimatedDate":"2026-05-08T00:00:00.000Z","reasoning":"Full lead time: 0wk design + 8wk mfg"}],"clickup":{"matched":false,"jobNo":"26-X2667","projectName":null,"status":null,"leadtimeWeeks":null,"productionEta":null,"prodFinished":null,"shopsStatus":null,"approvedShops":null,"paymentTerms":null,"milestones":[]}},{"quoteid":"c2866008-b428-40e6-9dee-1cf79868fe80","opportunityName":"26-X2665 SOLZ UK_Solzer Leeds_Soundstar","name":"26-X2665 SOLZ UK_Solzer Leeds_Soundstar","quotenumber":"\u2014","createdon":"2026-03-11","projectType":null,"designWeeks":null,"manufacturingWeeks":null,"totalLeadWeeks":null,"paymentTermsCode":null,"paymentTermsText":null,"manualPaymentTerms":null,"totalPrice":11268.84,"subtotal":null,"crating":null,"shipping":null,"opportunityId":"c2866008-b428-40e6-9dee-1cf79868fe80","milestones":[{"label":"1st Payment","percentage":0.5,"amount":5634.42,"trigger":"start","estimatedDate":"2026-03-18T00:00:00.000Z","reasoning":"Quote signed \u2192 invoice ~1 week"},{"label":"2nd Payment","percentage":0.5,"amount":5634.42,"trigger":"pre-ship","estimatedDate":"2026-05-06T00:00:00.000Z","reasoning":"Full lead time: 0wk design + 8wk mfg"}],"clickup":{"matched":true,"jobNo":"26-X2665","projectName":"SOLZ | UK_Solzer Leeds_Soundstar  ","status":"2 - first invoice","leadtimeWeeks":null,"productionEta":null,"prodFinished":null,"shopsStatus":null,"approvedShops":null,"paymentTerms":null,"milestones":[{"label":null,"amount":6974.42,"expectedDate":"2026-04-15T00:00:00.000Z","status":"pending"},{"label":null,"amount":6974.42,"expectedDate":"2026-06-15T00:00:00.000Z","status":"pending"}]}},{"quoteid":"adac16c0-dce0-4146-93dc-91eeed3c05d2","opportunityName":"26-X2664 SOTE ES_Refurbishment Soteria International AG Spain office_X_Vapor","name":"26-X2664 SOTE ES_Refurbishment Soteria International AG Spain office_X_Vapor","quotenumber":"\u2014","createdon":"2026-03-06","projectType":null,"designWeeks":null,"manufacturingWeeks":null,"totalLeadWeeks":null,"paymentTermsCode":null,"paymentTermsText":null,"manualPaymentTerms":null,"totalPrice":15024.96,"subtotal":null,"crating":null,"shipping":null,"opportunityId":"adac16c0-dce0-4146-93dc-91eeed3c05d2","milestones":[{"label":"1st Payment","percentage":0.5,"amount":7512.48,"trigger":"start","estimatedDate":"2026-03-13T00:00:00.000Z","reasoning":"Quote signed \u2192 invoice ~1 week"},{"label":"2nd Payment","percentage":0.5,"amount":7512.48,"trigger":"pre-ship","estimatedDate":"2026-05-01T00:00:00.000Z","reasoning":"Full lead time: 0wk design + 8wk mfg"}],"clickup":{"matched":true,"jobNo":"26-X2664","projectName":"SOTE | ES_Refurbishment Soteria International AG Spain office_X_Vapor","status":"5 - production","leadtimeWeeks":null,"productionEta":null,"prodFinished":null,"shopsStatus":null,"approvedShops":null,"paymentTerms":null,"milestones":[{"label":null,"amount":18674.96,"expectedDate":"2026-03-13T03:00:00.000Z","status":"received"}]}},{"quoteid":"5fd4b8fd-81f4-4944-83a9-dca463f10a70","opportunityName":"26-X2663 REDS UAE_Red Sea International Airport New Check-In Building_X_Vapor","name":"26-X2663 REDS UAE_Red Sea International Airport New Check-In Building_X_Vapor","quotenumber":"\u2014","createdon":"2026-03-03","projectType":null,"designWeeks":null,"manufacturingWeeks":null,"totalLeadWeeks":null,"paymentTermsCode":null,"paymentTermsText":null,"manualPaymentTerms":null,"totalPrice":27715.57,"subtotal":null,"crating":null,"shipping":null,"opportunityId":"5fd4b8fd-81f4-4944-83a9-dca463f10a70","milestones":[{"label":"1st Payment","percentage":0.5,"amount":13857.79,"trigger":"start","estimatedDate":"2026-03-10T00:00:00.000Z","reasoning":"Quote signed \u2192 invoice ~1 week"},{"label":"2nd Payment","percentage":0.5,"amount":13857.79,"trigger":"pre-ship","estimatedDate":"2026-04-28T00:00:00.000Z","reasoning":"Full lead time: 0wk design + 8wk mfg"}],"clickup":{"matched":true,"jobNo":"26-X2663","projectName":"REDS | UAE_Red Sea Intl. Airport New Check-In Building_X_Vapor","status":"5 - production","leadtimeWeeks":null,"productionEta":null,"prodFinished":null,"shopsStatus":null,"approvedShops":null,"paymentTerms":null,"milestones":[{"label":null,"amount":18982.785,"expectedDate":"2026-03-17T03:00:00.000Z","status":"received"},{"label":null,"amount":18982.785,"expectedDate":"2026-06-15T00:00:00.000Z","status":"pending"}]}}]};
+
+  async function loadData() {
+    const btn = document.getElementById('loadBtn');
+    const content = document.getElementById('content');
+    const kpis = document.getElementById('kpis');
+    const count = document.getElementById('quoteCount').value;
+
+    btn.disabled = true;
+    btn.textContent = 'LOADING...';
+    content.innerHTML = '<div class="empty-panel" style="padding:40px;">fetching from dynamics + cross-referencing clickup...</div>';
+    kpis.style.display = 'none';
+
+    let data;
+    try {
+      const resp = await fetch(`https://cashflow-lake-kappa.vercel.app/api/debug/quote-alignment?count=${count}`);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      data = await resp.json();
+      if (data.error) throw new Error(data.error);
+    } catch (e) {
+      console.log('live api unavailable, using embedded snapshot:', e.message);
+      data = EMBEDDED_DATA;
+    }
+
+    if (data === EMBEDDED_DATA && count < data.quotes.length) {
+      data = { ...data, quotes: data.quotes.slice(0, count) };
+    }
+
+    document.getElementById('ts').textContent = 'last updated: ' + fmtDate(data.generatedAt);
+    renderKPIs(data, kpis);
+    renderQuotes(data.quotes, content);
+    btn.disabled = false;
+    btn.textContent = 'REFRESH';
+  }
+
+  function renderKPIs(data, el) {
+    const quotes = data.quotes;
+    const totalValue = quotes.reduce((s, q) => s + (q.totalPrice || 0), 0);
+    const matched = quotes.filter(q => q.clickup?.matched).length;
+    const withQuoteData = quotes.filter(q => q.projectType).length;
+    const types = {};
+    quotes.forEach(q => {
+      const t = q.projectType || typeFromName(q.opportunityName) || '?';
+      types[t] = (types[t] || 0) + 1;
+    });
+
+    el.innerHTML = `
+      <div class="kpi-card">
+        <div class="kpi-label">CLOSED WON</div>
+        <div class="kpi-value">${quotes.length}</div>
+        <div class="kpi-caption">most recent opportunities</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">TOTAL VALUE</div>
+        <div class="kpi-value">${fmt(totalValue)}</div>
+        <div class="kpi-caption">${Object.entries(types).map(([t,c]) => c + 'x ' + t).join(', ').toLowerCase()}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">CLICKUP MATCHED</div>
+        <div class="kpi-value">${matched} / ${quotes.length}</div>
+        <div class="kpi-caption">${matched === quotes.length ? 'all aligned' : (quotes.length - matched) + ' unmatched'}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">QUOTE DATA</div>
+        <div class="kpi-value">${withQuoteData} / ${quotes.length}</div>
+        <div class="kpi-caption">${withQuoteData === quotes.length ? 'all have linked quotes' : (quotes.length - withQuoteData) + ' need quote sync'}</div>
+      </div>
+    `;
+    el.style.display = 'grid';
+  }
+
+  function renderQuotes(quotes, container) {
+    if (!quotes?.length) {
+      container.innerHTML = '<div class="empty-panel" style="padding:40px;">no closed won opportunities found</div>';
+      return;
+    }
+    container.innerHTML = '<div class="section-header"><span class="section-title">OPPORTUNITY DETAIL</span></div>' + quotes.map(renderCard).join('');
+  }
+
+  function renderCard(q) {
+    const cu = q.clickup;
+    const inferredType = q.projectType || typeFromName(q.opportunityName);
+    const matchBadge = cu
+      ? (cu.matched
+        ? '<span class="badge badge-matched">CLICKUP MATCHED</span>'
+        : '<span class="badge badge-unmatched">NOT IN CLICKUP</span>')
+      : '<span class="badge badge-unmatched">NO JOB #</span>';
+
+    const termsDisplay = q.paymentTermsText === 'Manual Entry'
+      ? q.manualPaymentTerms || 'not specified'
+      : (q.paymentTermsText || 'needs quote sync');
+    const termsClass = q.paymentTermsText ? '' : ' needs-sync';
+
+    return `
+      <div class="quote-card">
+        <div class="quote-header">
+          <div>
+            <div class="quote-name">${q.opportunityName || q.name}</div>
+            <div class="quote-meta">closed won ${fmtDate(q.createdon)}${q.quotenumber !== '\u2014' ? ' \u00b7 quote ' + q.quotenumber : ''}</div>
+          </div>
+          <div class="quote-badges">
+            ${inferredType ? '<span class="badge badge-type">' + inferredType + '</span>' : ''}
+            ${matchBadge}
+          </div>
+        </div>
+
+        <div class="data-grid">
+          <div class="data-panel">
+            <div class="panel-label">DYNAMICS</div>
+            <div class="data-row"><span class="data-key">VALUE</span><span class="data-val">${fmt(q.totalPrice)}</span></div>
+            ${q.subtotal ? '<div class="data-row"><span class="data-key">SUBTOTAL</span><span class="data-val">' + fmt(q.subtotal) + '</span></div>' : ''}
+            <div class="data-row"><span class="data-key">DESIGN WEEKS</span><span class="data-val${q.designWeeks != null ? '' : ' needs-sync'}">${q.designWeeks ?? 'needs quote sync'}</span></div>
+            <div class="data-row"><span class="data-key">MFG WEEKS</span><span class="data-val${q.manufacturingWeeks != null ? '' : ' needs-sync'}">${q.manufacturingWeeks ?? 'needs quote sync'}</span></div>
+            <div class="data-row"><span class="data-key">TOTAL LEAD</span><span class="data-val${q.totalLeadWeeks ? '' : ' needs-sync'}">${q.totalLeadWeeks ? q.totalLeadWeeks + ' wk' : 'needs quote sync'}</span></div>
+            ${q.crating ? '<div class="data-row"><span class="data-key">CRATING</span><span class="data-val">' + q.crating + '</span></div>' : ''}
+            ${q.shipping ? '<div class="data-row"><span class="data-key">SHIPPING</span><span class="data-val">' + q.shipping + '</span></div>' : ''}
+          </div>
+          <div class="data-panel">
+            <div class="panel-label">CLICKUP</div>
+            ${cu && cu.matched ? `
+              <div class="data-row"><span class="data-key">PROJECT</span><span class="data-val" style="font-size:9px;letter-spacing:1px;">${cu.projectName || '\u2014'}</span></div>
+              <div class="data-row"><span class="data-key">STATUS</span><span class="data-val">${cu.status || '\u2014'}</span></div>
+              <div class="data-row"><span class="data-key">LEAD TIME</span><span class="data-val${cu.leadtimeWeeks && q.totalLeadWeeks ? (cu.leadtimeWeeks === q.totalLeadWeeks ? ' match' : ' mismatch') : cu.leadtimeWeeks ? '' : ' missing'}">${cu.leadtimeWeeks ? cu.leadtimeWeeks + ' wk' : '\u2014'}</span></div>
+              <div class="data-row"><span class="data-key">PROD. ETA</span><span class="data-val${cu.productionEta ? '' : ' missing'}">${fmtDate(cu.productionEta)}</span></div>
+              <div class="data-row"><span class="data-key">PROD. FINISHED</span><span class="data-val${cu.prodFinished ? '' : ' missing'}">${fmtDate(cu.prodFinished)}</span></div>
+              <div class="data-row"><span class="data-key">SHOPS STATUS</span><span class="data-val${cu.shopsStatus ? '' : ' missing'}">${cu.shopsStatus || '\u2014'}</span></div>
+              <div class="data-row"><span class="data-key">APPROVED SHOPS</span><span class="data-val${cu.approvedShops ? '' : ' missing'}">${fmtDate(cu.approvedShops)}</span></div>
+            ` : `
+              <div class="empty-panel">${cu ? 'job no. "' + cu.jobNo + '" not found in clickup' : 'could not extract job no. from opportunity'}</div>
+            `}
+          </div>
+        </div>
+
+        <div class="terms-bar">
+          <span class="terms-key">PAYMENT TERMS</span>
+          <span class="terms-val${termsClass}">${termsDisplay}</span>
+        </div>
+
+        <table class="milestone-table">
+          <thead><tr>
+            <th>MILESTONE</th>
+            <th>TRIGGER</th>
+            <th class="right">%</th>
+            <th class="right">AMOUNT</th>
+            <th>EST. DATE</th>
+            <th>REASONING</th>
+            ${cu && cu.matched ? '<th>CLICKUP DATE</th><th>CLICKUP STATUS</th>' : ''}
+          </tr></thead>
+          <tbody>
+            ${q.milestones.map((m, i) => {
+              const cuMs = cu?.matched && cu.milestones[i] ? cu.milestones[i] : null;
+              const dateDiff = cuMs ? Math.abs(daysBetween(m.estimatedDate, cuMs.expectedDate)) : 999;
+              return `<tr>
+                <td>${m.label}</td>
+                <td><span class="trigger-tag trigger-${m.trigger.startsWith('NET') ? 'net' : m.trigger}">${m.trigger}</span></td>
+                <td class="right">${Math.round(m.percentage * 100)}%</td>
+                <td class="right">${fmt(m.amount)}</td>
+                <td>${fmtDate(m.estimatedDate)}</td>
+                <td class="dim">${m.reasoning}</td>
+                ${cu && cu.matched ? `
+                  <td class="${cuMs ? (dateDiff <= 14 ? 'data-val match' : 'data-val mismatch') : 'data-val missing'}" style="font-family:var(--mono);">${cuMs ? fmtDate(cuMs.expectedDate) : '\u2014'}</td>
+                  <td>${cuMs ? '<span class="status-tag status-' + cuMs.status + '">' + cuMs.status + '</span>' : '\u2014'}</td>
+                ` : ''}
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+
+        ${renderTimeline(q)}
+
+        <div class="legend">
+          <div class="legend-item"><div class="legend-dot" style="background:var(--yellow);"></div>DESIGN</div>
+          <div class="legend-item"><div class="legend-dot" style="background:var(--blue);"></div>MANUFACTURING</div>
+          <div class="legend-item"><div class="legend-dot dot-dynamics"></div>DYNAMICS EST.</div>
+          ${cu && cu.matched ? '<div class="legend-item"><div class="legend-dot dot-clickup"></div>CLICKUP</div>' : ''}
+        </div>
+      </div>
+    `;
+  }
+
+  function renderTimeline(q) {
+    const cu = q.clickup;
+    const anchor = new Date(q.createdon);
+    const dw = q.designWeeks || 0;
+    const mw = q.manufacturingWeeks || 8;
+
+    const allDates = [anchor];
+    q.milestones.forEach(m => allDates.push(new Date(m.estimatedDate)));
+    if (cu?.matched) cu.milestones.forEach(m => { if (m.expectedDate) allDates.push(new Date(m.expectedDate)); });
+
+    const minDate = new Date(Math.min(...allDates.map(d => d.getTime())) - 7 * 86400000);
+    const maxDate = new Date(Math.max(...allDates.map(d => d.getTime())) + 14 * 86400000);
+    const totalDays = daysBetween(minDate, maxDate) || 1;
+
+    function pct(date) {
+      return Math.max(2, Math.min(98, (daysBetween(minDate, date) / totalDays) * 100));
+    }
+
+    const designEnd = new Date(anchor.getTime() + dw * 7 * 86400000);
+    const mfgEnd = new Date(designEnd.getTime() + mw * 7 * 86400000);
+
+    let phases = '';
+    if (dw > 0) phases += `<div class="timeline-phase phase-design" style="left:${pct(anchor)}%;width:${pct(designEnd) - pct(anchor)}%;">DESIGN ${dw}W</div>`;
+    if (mw > 0) phases += `<div class="timeline-phase phase-mfg" style="left:${pct(designEnd)}%;width:${pct(mfgEnd) - pct(designEnd)}%;">MFG ${mw}W</div>`;
+
+    let dots = q.milestones.map(m => {
+      const left = pct(new Date(m.estimatedDate));
+      return `<div class="timeline-milestone" style="left:${left}%;">
+        <div class="milestone-dot dot-dynamics"></div>
+        <div class="milestone-amt">${fmt(m.amount)}</div>
+        <div class="milestone-lbl">${m.label}<br>${shortDate(m.estimatedDate)}</div>
+      </div>`;
+    }).join('');
+
+    if (cu?.matched && cu.milestones.length > 0) {
+      dots += cu.milestones.map((m, i) => {
+        if (!m.expectedDate) return '';
+        const left = pct(new Date(m.expectedDate));
+        const cls = m.status === 'received' ? 'dot-received' : m.status === 'invoiced' ? 'dot-invoiced' : 'dot-pending';
+        return `<div class="timeline-milestone" style="left:${left}%;top:62px;">
+          <div class="milestone-dot ${cls}"></div>
+          <div class="milestone-lbl" style="color:var(--green);">${m.label || 'CU #' + (i+1)}<br>${shortDate(m.expectedDate)}</div>
+        </div>`;
+      }).join('');
+    }
+
+    const ticks = [];
+    const td = new Date(minDate);
+    td.setDate(1);
+    td.setMonth(td.getMonth() + 1);
+    while (td < maxDate) { ticks.push(new Date(td)); td.setMonth(td.getMonth() + 1); }
+
+    const ticksHtml = ticks.map(d =>
+      `<div class="timeline-tick" style="left:${pct(d)}%;">${d.toLocaleDateString('en-GB', { month: 'short', year: '2-digit' }).toLowerCase()}</div>`
+    ).join('');
+
+    return `<div class="timeline-section">
+      <div class="panel-label">TIMELINE</div>
+      <div class="timeline-container">${phases}${dots}<div class="timeline-axis"></div>${ticksHtml}</div>
+    </div>`;
+  }
+
+  window.addEventListener('DOMContentLoaded', () => loadData());
+</script>
+</body>
+</html>
