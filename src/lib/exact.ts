@@ -222,12 +222,10 @@ export async function fetchReceivables(): Promise<{ total: number; items: ExactR
  * Fetch outstanding payables (AP).
  */
 export async function fetchPayables(): Promise<{ total: number; items: ExactPayable[] }> {
-  // Try PayablesList first — use AmountDC (domestic currency) for consistent totals
-  const items = await exactGet<(ExactPayable & { AmountDC?: number })[]>(
-    "/read/financial/PayablesList?$select=AccountName,Amount,AmountDC,InvoiceNumber,InvoiceDate,DueDate,CurrencyCode"
+  const items = await exactGet<ExactPayable[]>(
+    "/read/financial/PayablesList?$select=AccountName,Amount,InvoiceNumber,InvoiceDate,DueDate,CurrencyCode"
   );
-  // Use AmountDC if available, fall back to Amount. Use absolute values.
-  const total = items.reduce((sum, item) => sum + Math.abs(item.AmountDC ?? item.Amount ?? 0), 0);
+  const total = items.reduce((sum, item) => sum + Math.abs(item.Amount || 0), 0);
   return { total, items };
 }
 
