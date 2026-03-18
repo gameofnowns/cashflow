@@ -256,24 +256,15 @@ export async function fetchReceivables(): Promise<{ total: number; items: ExactR
 }
 
 /**
- * Fetch outstanding payables (AP) from PurchaseEntries with open status.
- * Uses PurchaseEntries (Status=20) instead of PayablesList for accurate totals.
- * Paginates through all pages (Exact returns max 60 per page).
+ * Fetch outstanding payables (AP).
+ * Uses PayablesList with full pagination (Exact returns max 60 per page).
+ * The Exact dashboard "Purchase Outstanding Items" should match this total.
  */
 export async function fetchPayables(): Promise<{ total: number; items: ExactPayable[] }> {
-  const entries = await exactGetAll<{ AmountDC: number; SupplierName: string; EntryNumber: number }>(
-    "/purchaseentry/PurchaseEntries?$select=AmountDC,SupplierName,EntryNumber&$filter=Status eq 20"
+  const items = await exactGetAll<ExactPayable>(
+    "/read/financial/PayablesList?$select=AccountName,Amount,InvoiceNumber,InvoiceDate,DueDate,CurrencyCode"
   );
-  const total = entries.reduce((sum, item) => sum + Math.abs(item.AmountDC || 0), 0);
-  // Map to ExactPayable interface for consistency
-  const items: ExactPayable[] = entries.map(e => ({
-    AccountName: e.SupplierName || "",
-    Amount: Math.abs(e.AmountDC || 0),
-    InvoiceNumber: String(e.EntryNumber || ""),
-    InvoiceDate: "",
-    DueDate: "",
-    CurrencyCode: "EUR",
-  }));
+  const total = items.reduce((sum, item) => sum + Math.abs(item.Amount || 0), 0);
   return { total, items };
 }
 
@@ -282,42 +273,44 @@ export async function fetchPayables(): Promise<{ total: number; items: ExactPaya
  * Uses the financial reporting balance endpoint.
  */
 export async function fetchBankBalance(): Promise<number> {
-  // NOWN bank/liquid asset GL accounts are in the 10xx-11xx range:
+  // NOWN bank/liquid asset GL accounts (confirmed from Exact):
   // 1000 = ING Creditcard
-  // 1100 = Main ING EUR operations (assumed)
+  // 1100 = ING EUR Operations (NL91 INGB 0009 2651 80)
   // 1101 = JP Morgan Chase USD
-  // 1103 = ING Bank GBP
+  // 1103 = ING Bank GBP (NL02 INGB 0020 2402 95)
   // 1104 = Pleo Wallet
-  // etc.
-  // Sum ReportingBalance across ALL years for cumulative balance
+  // Plus NL09 account and savings — need to find their GL codes
+  //
+  // ReportingBalance gives period MOVEMENTS, not running balance.
+  // Cumulative balance = sum of ALL movements across ALL years.
+  // MUST paginate — each account can have 60+ entries across years.
 
   try {
-    // First, find all GL accounts in the bank/liquid assets range
+    // Get all GL accounts in the 10xx-11xx range (bank/cash/liquid assets)
     const glAccounts = await exactGetAll<{ Code: string; Description: string }>(
       "/financial/GLAccounts?$select=Code,Description&$filter=startswith(Code,'10') or startswith(Code,'11')"
     );
 
-    // Filter to likely bank/cash accounts (exclude debtors 1200, VAT 15xx, etc.)
-    const bankCodes = glAccounts
-      .filter(a => {
-        const code = parseInt(a.Code);
-        return code >= 1000 && code <= 1199; // 10xx and 11xx only
-      })
-      .map(a => a.Code);
+    // Filter to bank/cash accounts only (10xx and 11xx, exclude 12xx debtors etc.)
+    const bankAccounts = glAccounts.filter(a => {
+      const code = parseInt(a.Code);
+      return code >= 1000 && code <= 1199;
+    });
 
-    if (bankCodes.length === 0) return 0;
+    if (bankAccounts.length === 0) return 0;
 
     let total = 0;
-    for (const code of bankCodes) {
+    for (const account of bankAccounts) {
       try {
+        // PAGINATE through all reporting balance entries for this account
         const balances = await exactGetAll<{ Amount: number }>(
-          `/financial/ReportingBalance?$select=Amount&$filter=GLAccountCode eq '${code}'`
+          `/financial/ReportingBalance?$select=Amount&$filter=GLAccountCode eq '${account.Code}'`
         );
         for (const b of balances) {
           total += b.Amount || 0;
         }
       } catch {
-        // Skip this account
+        // Skip this account if query fails
       }
     }
     return total;
