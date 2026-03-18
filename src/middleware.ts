@@ -11,6 +11,11 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // Skip debug endpoints
+  if (request.nextUrl.pathname.startsWith("/api/debug/")) {
+    return NextResponse.next();
+  }
+
   // Skip webhook endpoints that use their own auth
   if (request.nextUrl.pathname === "/api/sync/dynamics" && request.method === "POST") {
     return NextResponse.next();
