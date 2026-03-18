@@ -31,31 +31,35 @@ export async function GET() {
 
   const results: Record<string, unknown> = {};
 
-  // 1. Find ALL GL accounts with code starting with 2 (bank range)
-  results.glAccountsBank = await exactGet(
-    "/financial/GLAccounts?$select=Code,Description&$filter=startswith(Code,'2')&$top=20",
+  // 1. Find GL accounts starting with '1' (liquid assets / bank in Dutch accounting)
+  results.glAccounts1xxx = await exactGet(
+    "/financial/GLAccounts?$select=Code,Description&$filter=startswith(Code,'1')&$top=30",
     auth.token, auth.division!
   );
 
-  // 2. Try ReportingBalance for different GL code formats
-  for (const code of ["20", "2000", "20000", "200000"]) {
-    results[`reportingBalance_${code}`] = await exactGet(
-      `/financial/ReportingBalance?$select=GLAccountCode,GLAccountDescription,Amount,ReportingYear,ReportingPeriod&$filter=GLAccountCode eq '${code}'`,
-      auth.token, auth.division!
-    );
-  }
-
-  // 3. Get total PayablesList count and sum
-  results.payablesAll = await exactGet(
-    "/read/financial/PayablesList?$select=Amount",
+  // 2. Find GL accounts starting with '0' (in case banks are there)
+  results.glAccounts0xxx = await exactGet(
+    "/financial/GLAccounts?$select=Code,Description&$filter=startswith(Code,'0')&$top=20",
     auth.token, auth.division!
   );
 
-  // Calculate total AP
-  const payData = results.payablesAll as { data: Array<{ Amount: number }> };
-  if (Array.isArray(payData.data)) {
-    const totalAP = payData.data.reduce((sum: number, item: { Amount: number }) => sum + Math.abs(item.Amount || 0), 0);
-    results.payablesTotalCalculated = { count: payData.data.length, total: totalAP };
+  // 3. Try financial/BankAccounts endpoint
+  results.bankAccounts = await exactGet(
+    "/cashflow/Banks?$select=BankAccountName,CurrentBalance",
+    auth.token, auth.division!
+  );
+
+  // 4. Get AP total from PurchaseEntries with open status (Status 20 = open)
+  results.purchaseEntriesOpen = await exactGet(
+    "/purchaseentry/PurchaseEntries?$select=AmountDC&$filter=Status eq 20",
+    auth.token, auth.division!
+  );
+
+  // Calculate AP from purchase entries
+  const peData = results.purchaseEntriesOpen as { data: Array<{ AmountDC: number }> };
+  if (Array.isArray(peData.data)) {
+    const totalAP = peData.data.reduce((sum: number, item: { AmountDC: number }) => sum + Math.abs(item.AmountDC || 0), 0);
+    results.purchaseEntriesTotalCalculated = { count: peData.data.length, total: totalAP };
   }
 
   return NextResponse.json(results);
