@@ -131,10 +131,15 @@ async function getValidToken(): Promise<{ token: string; division: string }> {
   });
   if (!stored) throw new Error("No Exact Online token found. Please authorize first at /api/auth/exact");
 
-  // Refresh if expired or about to expire (5 min buffer)
-  if (new Date() >= new Date(stored.expiresAt.getTime() - 5 * 60 * 1000)) {
-    const newToken = await refreshAccessToken();
-    return { token: newToken, division: stored.division || "" };
+  // Only refresh if actually expired (no early buffer — Exact rate-limits refresh calls)
+  if (new Date() >= stored.expiresAt) {
+    try {
+      const newToken = await refreshAccessToken();
+      return { token: newToken, division: stored.division || "" };
+    } catch {
+      // If refresh fails with rate limit, try using existing token anyway
+      return { token: stored.accessToken, division: stored.division || "" };
+    }
   }
 
   return { token: stored.accessToken, division: stored.division || "" };
