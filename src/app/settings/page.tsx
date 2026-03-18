@@ -24,6 +24,8 @@ function SettingsContent() {
   const [loading, setLoading] = useState(true);
   const [exactSyncing, setExactSyncing] = useState(false);
   const [exactResult, setExactResult] = useState<string | null>(null);
+  const [dynamicsSyncing, setDynamicsSyncing] = useState(false);
+  const [dynamicsResult, setDynamicsResult] = useState<string | null>(null);
   const searchParams = useSearchParams();
 
   const exactConnected = searchParams.get("exact_connected") === "true";
@@ -44,6 +46,26 @@ function SettingsContent() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ month, amount, updatedBy: "dashboard" }),
     });
+  }
+
+  async function syncDynamics() {
+    setDynamicsSyncing(true);
+    setDynamicsResult(null);
+    try {
+      const res = await fetch("/api/sync/dynamics", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        setDynamicsResult(`Error: ${data.error}`);
+      } else {
+        setDynamicsResult(
+          `Synced ${data.synced} pipeline deals of ${data.total} (${data.skipped} skipped)${data.errors?.length ? `, ${data.errors.length} errors` : ""}`
+        );
+      }
+    } catch (e) {
+      setDynamicsResult(`Error: ${e instanceof Error ? e.message : "Network error"}`);
+    } finally {
+      setDynamicsSyncing(false);
+    }
   }
 
   async function syncExact() {
@@ -129,10 +151,19 @@ function SettingsContent() {
               <p className="text-sm font-medium text-gray-900">Dynamics CRM</p>
               <p className="text-xs text-gray-500">Pipeline deals (90%+)</p>
             </div>
-            <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-500">
-              Not connected
-            </span>
+            <button
+              onClick={syncDynamics}
+              disabled={dynamicsSyncing}
+              className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            >
+              {dynamicsSyncing ? "Syncing..." : "Sync Now"}
+            </button>
           </div>
+          {dynamicsResult && (
+            <p className={`text-xs ${dynamicsResult.startsWith("Error") ? "text-red-600" : "text-green-600"}`}>
+              {dynamicsResult}
+            </p>
+          )}
         </div>
       </div>
 
