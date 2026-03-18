@@ -16,7 +16,8 @@ async function exactGet(path: string, token: string, division: string) {
   });
   const text = await res.text();
   try {
-    return { status: res.status, url, data: JSON.parse(text) };
+    const json = JSON.parse(text);
+    return { status: res.status, url, data: json.d?.results ?? json.d ?? json };
   } catch {
     return { status: res.status, url, data: text };
   }
@@ -30,29 +31,32 @@ export async function GET() {
 
   const results: Record<string, unknown> = {};
 
-  // 1. Check GL accounts that are bank accounts
-  results.glBankAccounts = await exactGet(
-    "/financial/GLAccounts?$select=Code,Description,IsBankAccount&$filter=IsBankAccount eq true",
+  // 1. Find ALL GL accounts with code starting with 2 (bank range)
+  results.glAccountsBank = await exactGet(
+    "/financial/GLAccounts?$select=Code,Description&$filter=startswith(Code,'2')&$top=20",
     auth.token, auth.division!
   );
 
-  // 2. Check ReportingBalance for GL code 20 (main bank)
-  results.reportingBalance20 = await exactGet(
-    "/financial/ReportingBalance?$select=GLAccountCode,GLAccountDescription,Amount,ReportingYear,ReportingPeriod&$filter=GLAccountCode eq '20'",
+  // 2. Try ReportingBalance for different GL code formats
+  for (const code of ["20", "2000", "20000", "200000"]) {
+    results[`reportingBalance_${code}`] = await exactGet(
+      `/financial/ReportingBalance?$select=GLAccountCode,GLAccountDescription,Amount,ReportingYear,ReportingPeriod&$filter=GLAccountCode eq '${code}'`,
+      auth.token, auth.division!
+    );
+  }
+
+  // 3. Get total PayablesList count and sum
+  results.payablesAll = await exactGet(
+    "/read/financial/PayablesList?$select=Amount",
     auth.token, auth.division!
   );
 
-  // 3. Check PayablesList count and first few items
-  results.payablesList = await exactGet(
-    "/read/financial/PayablesList?$select=AccountName,Amount,InvoiceNumber&$top=5",
-    auth.token, auth.division!
-  );
-
-  // 4. Try the OutstandingInvoicesPayable endpoint
-  results.outstandingPayable = await exactGet(
-    "/purchaseentry/PurchaseEntries?$select=AmountDC,EntryNumber,SupplierName&$filter=Status eq 20&$top=5",
-    auth.token, auth.division!
-  );
+  // Calculate total AP
+  const payData = results.payablesAll as { data: Array<{ Amount: number }> };
+  if (Array.isArray(payData.data)) {
+    const totalAP = payData.data.reduce((sum: number, item: { Amount: number }) => sum + Math.abs(item.Amount || 0), 0);
+    results.payablesTotalCalculated = { count: payData.data.length, total: totalAP };
+  }
 
   return NextResponse.json(results);
 }
