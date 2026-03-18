@@ -235,44 +235,23 @@ export async function fetchPayables(): Promise<{ total: number; items: ExactPaya
  */
 export async function fetchBankBalance(): Promise<number> {
   // NOWN bank accounts are GL codes 20-26
-  // Sum up the ReportingBalance for all bank GL accounts
-  try {
-    const year = new Date().getFullYear();
-    // Fetch all reporting balances for bank accounts (GL codes starting with '2' in the 20-29 range)
-    const balances = await exactGet<Array<{
-      GLAccountCode: string;
-      GLAccountDescription: string;
-      Amount: number;
-      ReportingPeriod: number;
-    }>>(
-      `/financial/ReportingBalance?$select=GLAccountCode,GLAccountDescription,Amount,ReportingPeriod&$filter=ReportingYear eq ${year} and substringof('Bank',GLAccountDescription) eq true`
-    );
-    if (balances.length > 0) {
-      // Get the latest period's balance for each account
-      const latestByAccount = new Map<string, number>();
-      for (const b of balances) {
-        const existing = latestByAccount.get(b.GLAccountCode);
-        if (existing === undefined || b.ReportingPeriod > 0) {
-          latestByAccount.set(b.GLAccountCode, b.Amount || 0);
-        }
-      }
-      return Array.from(latestByAccount.values()).reduce((sum, amt) => sum + amt, 0);
-    }
-  } catch {
-    // Fallback approach
-  }
+  // The "Current balance" in Exact is cumulative across ALL years
+  // ReportingBalance per year only shows that year's movements
+  // We need to sum across all years, or use a different approach
 
-  // Fallback: query each known bank account directly
+  // Approach: Use financial/BalanceByGLAccountAndCostCenter which gives cumulative balances
+  // Or sum ReportingBalance across all years for bank accounts
   try {
-    const year = new Date().getFullYear();
     let total = 0;
     for (const code of ["20", "21", "22", "23", "24", "25", "26"]) {
       try {
-        const balances = await exactGet<Array<{ Amount: number; ReportingPeriod: number }>>(
-          `/financial/ReportingBalance?$select=Amount,ReportingPeriod&$filter=ReportingYear eq ${year} and GLAccountCode eq '${code}'&$orderby=ReportingPeriod desc&$top=1`
+        // Get ALL reporting balances across all years for this GL account
+        const balances = await exactGet<Array<{ Amount: number; ReportingYear: number; ReportingPeriod: number }>>(
+          `/financial/ReportingBalance?$select=Amount,ReportingYear,ReportingPeriod&$filter=GLAccountCode eq '${code}'`
         );
-        if (balances.length > 0) {
-          total += balances[0].Amount || 0;
+        // Sum all periods across all years = cumulative balance
+        for (const b of balances) {
+          total += b.Amount || 0;
         }
       } catch {
         // Skip this account
