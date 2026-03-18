@@ -229,7 +229,7 @@ export async function syncDynamics(): Promise<{
         },
       });
 
-      // Replace milestones — split 50/50 based on estimated close date
+      // Replace milestones — split 50/50 with type-aware timing
       await prisma.paymentMilestone.deleteMany({
         where: { projectId: project.id },
       });
@@ -238,18 +238,30 @@ export async function syncDynamics(): Promise<{
         ? new Date(opp.estimatedclosedate)
         : new Date(Date.now() + 90 * 24 * 60 * 60 * 1000);
 
+      // 1st payment: ~1 week after close (quote signed → invoice → payment)
+      // Final payment: depends on project type
+      //   X: close + 10 weeks (production only, no design)
+      //   Y/Z: close + 16 weeks (design + approval + production)
+      const firstPaymentWeeks = 1;
+      const finalPaymentWeeks = projectType === "X" ? 10 : 16;
+
+      const addWeeks = (date: Date, weeks: number) =>
+        new Date(date.getTime() + weeks * 7 * 24 * 60 * 60 * 1000);
+
       await prisma.paymentMilestone.createMany({
         data: [
           {
             projectId: project.id,
+            label: "1st Payment",
             amount: opp.estimatedvalue * 0.5,
-            expectedDate: closeDate,
+            expectedDate: addWeeks(closeDate, firstPaymentWeeks),
             status: "pending",
           },
           {
             projectId: project.id,
+            label: "Final Payment",
             amount: opp.estimatedvalue * 0.5,
-            expectedDate: new Date(closeDate.getFullYear(), closeDate.getMonth() + 2, closeDate.getDate()),
+            expectedDate: addWeeks(closeDate, finalPaymentWeeks),
             status: "pending",
           },
         ],

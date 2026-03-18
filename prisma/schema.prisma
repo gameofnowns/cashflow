@@ -16,10 +16,26 @@ model Project {
   confidenceTier String   @map("confidence_tier") // 'won' | 'committed' | 'pipeline'
   totalValue     Float?   @map("total_value")
   status         String?
+
+  // Timing fields (from ClickUp)
+  quoteDate         DateTime? @map("quote_date")          // Signed quote date — anchor for all timing
+  leadtimeWeeks     Float?    @map("leadtime_weeks")      // Total lead time (design + production)
+  productionEta     DateTime? @map("production_eta")      // Projected production deadline
+  prodFinishedDate  DateTime? @map("prod_finished_date")  // Actual production complete
+  dueDateShops      DateTime? @map("due_date_shops")      // When NOWN owes drawings to client (Y/Z)
+  shopsStatus       String?   @map("shops_status")        // "Approved" = production can start (Y/Z)
+  approvedShopsDate DateTime? @map("approved_shops_date") // Date client approved drawings (Y/Z)
+  recordSetStatus   String?   @map("record_set_status")   // Drawing progress (Not Started/In Progress/Sent/Revision Required)
+  dueDate           DateTime? @map("due_date")            // Client's desired delivery date
+  contractDeadline  DateTime? @map("contract_deadline")   // Contractual deadline
+  actualDispatch    DateTime? @map("actual_dispatch")     // When goods shipped
+  paymentTerms      String?   @map("payment_terms")       // Per-project payment terms
+
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
 
-  milestones PaymentMilestone[]
+  milestones  PaymentMilestone[]
+  arLineItems ArLineItem[]
 
   @@unique([externalId, source])
   @@map("projects")
@@ -28,6 +44,7 @@ model Project {
 model PaymentMilestone {
   id           String   @id @default(uuid())
   projectId    String   @map("project_id")
+  label        String?  // '1st Payment' | 'Final Payment' | 'Full Payment' | '2nd Payment' etc.
   amount       Float
   expectedDate DateTime @map("expected_date")
   status       String   @default("pending") // 'pending' | 'invoiced' | 'received'
@@ -74,4 +91,25 @@ model OverheadBudget {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("overhead_budget")
+}
+
+model ArLineItem {
+  id            String   @id @default(uuid())
+  invoiceNumber String   @map("invoice_number")
+  accountName   String   @map("account_name")
+  description   String?
+  amount        Float
+  invoiceDate   DateTime @map("invoice_date")
+  dueDate       DateTime @map("due_date")
+  currencyCode  String   @map("currency_code")
+  jobNo         String?  @map("job_no")         // Extracted from description (e.g., "26-Y2651")
+  projectId     String?  @map("project_id")     // FK if matched to a project
+  matchStatus   String   @default("unmatched")  @map("match_status") // 'matched' | 'unmatched'
+  snapshotDate  DateTime @map("snapshot_date")  // When this was fetched from Exact
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  project Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@unique([invoiceNumber, snapshotDate])
+  @@map("ar_line_items")
 }

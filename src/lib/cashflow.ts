@@ -54,12 +54,19 @@ function toMonthKey(date: Date): string {
 
 /**
  * Generate the 12-month rolling cash flow forecast.
- * Separates Operating (won only) from Forecasted (includes pipeline).
- * This fixes the bug in the Excel model where forecasted AR leaked into operating position.
+ *
+ * 3-layer payment timing:
+ * - Layer 1 (Current AR): Unmatched AR items from Exact, bucketed by actual DueDate
+ * - Layer 2 (Billable AR): Won project milestones (pending + invoiced), using real project timing
+ * - Layer 3 (Forecasted AR): Pipeline milestones from Dynamics
+ *
+ * Matched AR items already updated their milestones to "invoiced" with real DueDates,
+ * so they flow through Layer 2 automatically — no double-counting.
  */
 export async function generateForecast(
   startDate: Date = new Date()
 ): Promise<MonthlyBreakdown[]> {
+  const currentMonthKey = toMonthKey(startDate);
   const months: string[] = [];
   for (let i = 0; i < 12; i++) {
     const d = new Date(startDate.getFullYear(), startDate.getMonth() + i, 1);
@@ -72,10 +79,25 @@ export async function generateForecast(
     include: { milestones: true },
   });
 
-  // Fetch latest financial snapshot
+  // Fetch latest financial snapshot (for bank balance only — AR total no longer used for forecast)
   const latestSnapshot = await prisma.financialSnapshot.findFirst({
     orderBy: { snapshotDate: "desc" },
   });
+
+  // Fetch unmatched AR items — these are real invoices not linked to any project
+  // They contribute to operating cash by their actual due date
+  const unmatchedAr = await prisma.arLineItem.findMany({
+    where: { matchStatus: "unmatched" },
+  });
+
+  // Bucket unmatched AR by due date (floor past-due into current month)
+  const unmatchedArByMonth: Record<string, number> = {};
+  for (const item of unmatchedAr) {
+    const monthKey = toMonthKey(item.dueDate);
+    // If overdue (past due date), bucket into current month
+    const effectiveMonth = monthKey < currentMonthKey ? currentMonthKey : monthKey;
+    unmatchedArByMonth[effectiveMonth] = (unmatchedArByMonth[effectiveMonth] || 0) + item.amount;
+  }
 
   // Fetch overhead budgets for the forecast period
   const overheads = await prisma.overheadBudget.findMany();
@@ -96,16 +118,19 @@ export async function generateForecast(
 
     for (const ms of project.milestones) {
       if (ms.status === "received") continue;
+
       const monthKey = toMonthKey(ms.expectedDate);
+      // Floor past-due milestones into current month
+      const effectiveMonth = monthKey < currentMonthKey ? currentMonthKey : monthKey;
 
       if (isWon) {
-        billableByMonth[monthKey] = (billableByMonth[monthKey] || 0) + ms.amount;
-        cogsByMonthWon[monthKey] =
-          (cogsByMonthWon[monthKey] || 0) + calculateCOGS(ms.amount, type);
+        billableByMonth[effectiveMonth] = (billableByMonth[effectiveMonth] || 0) + ms.amount;
+        cogsByMonthWon[effectiveMonth] =
+          (cogsByMonthWon[effectiveMonth] || 0) + calculateCOGS(ms.amount, type);
       } else {
-        forecastedByMonth[monthKey] = (forecastedByMonth[monthKey] || 0) + ms.amount;
-        cogsByMonthPipeline[monthKey] =
-          (cogsByMonthPipeline[monthKey] || 0) + calculateCOGS(ms.amount, type);
+        forecastedByMonth[effectiveMonth] = (forecastedByMonth[effectiveMonth] || 0) + ms.amount;
+        cogsByMonthPipeline[effectiveMonth] =
+          (cogsByMonthPipeline[effectiveMonth] || 0) + calculateCOGS(ms.amount, type);
       }
     }
   }
@@ -131,13 +156,13 @@ export async function generateForecast(
 
   // Build monthly breakdown with rolling cash position
   const bankBalance = latestSnapshot?.bankBalance ?? 0;
-  const currentAr = latestSnapshot?.totalAr ?? 0;
 
   let runningOperating = bankBalance;
   const result: MonthlyBreakdown[] = [];
 
   for (let i = 0; i < months.length; i++) {
     const month = months[i];
+    const currentAr = unmatchedArByMonth[month] || 0;
     const billable = billableByMonth[month] || 0;
     const forecasted = forecastedByMonth[month] || 0;
     const cogsWon = cogsByMonthWon[month] || 0;
@@ -145,19 +170,16 @@ export async function generateForecast(
     const vat = vatByMonth[month] || 0;
     const overhead = overheadByMonth[month] || 0;
 
-    // Current AR only counts in first month
-    const monthCurrentAr = i === 0 ? currentAr : 0;
-
-    // Operating = won projects only (fixes Excel bug: no forecasted AR here)
+    // Operating = bank + unmatched AR (by due date) + won milestones - COGS + VAT - overhead
     runningOperating =
-      runningOperating + monthCurrentAr + billable - cogsWon + vat - overhead;
+      runningOperating + currentAr + billable - cogsWon + vat - overhead;
 
     // Forecasted = operating + pipeline
     const forecastedCash = runningOperating + forecasted - cogsPipeline;
 
     result.push({
       month,
-      currentAr: monthCurrentAr,
+      currentAr,
       billableAr: billable,
       forecastedAr: forecasted,
       cogsWon,

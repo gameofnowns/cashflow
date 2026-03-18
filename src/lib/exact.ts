@@ -233,6 +233,7 @@ interface ExactReceivable {
   InvoiceDate: string;
   DueDate: string;
   CurrencyCode: string;
+  Description: string;
 }
 
 interface ExactPayable {
@@ -249,7 +250,7 @@ interface ExactPayable {
  */
 export async function fetchReceivables(): Promise<{ total: number; items: ExactReceivable[] }> {
   const items = await exactGetAll<ExactReceivable>(
-    "/read/financial/ReceivablesList?$select=AccountName,Amount,InvoiceNumber,InvoiceDate,DueDate,CurrencyCode"
+    "/read/financial/ReceivablesList?$select=AccountName,Amount,InvoiceNumber,InvoiceDate,DueDate,CurrencyCode,Description"
   );
   const total = items.reduce((sum, item) => sum + (item.Amount || 0), 0);
   return { total, items };
@@ -319,13 +320,149 @@ export async function fetchBankBalance(): Promise<number> {
   }
 }
 
+// ─── AR Matching ─────────────────────────────────────────────
+
+/**
+ * Extract Job No. from an Exact invoice description.
+ * Format: "26-Y2651 - GENK | BE_K.R.C. Genk_Y_SoftSpan"
+ * Returns e.g. "26-Y2651" or null.
+ */
+export function extractJobNo(description: string | null | undefined): string | null {
+  if (!description) return null;
+  const match = description.match(/\d{2}-[XYZ]\d{3,4}/);
+  return match ? match[0] : null;
+}
+
+/**
+ * Parse Exact Online's date format.
+ * Exact returns dates as "/Date(1234567890)/" or ISO strings.
+ */
+function parseExactDate(dateStr: string | null | undefined): Date {
+  if (!dateStr) return new Date();
+  // Handle /Date(ms)/ format
+  const msMatch = dateStr.match(/\/Date\((\d+)\)\//);
+  if (msMatch) return new Date(Number(msMatch[1]));
+  // Try ISO parse
+  const d = new Date(dateStr);
+  return isNaN(d.getTime()) ? new Date() : d;
+}
+
+/**
+ * Match AR line items to projects and store them.
+ * For matched items, updates the corresponding milestone to "invoiced".
+ */
+async function matchAndStoreArItems(
+  items: ExactReceivable[]
+): Promise<{ matched: number; unmatched: number }> {
+  const now = new Date();
+  let matched = 0;
+  let unmatched = 0;
+
+  // Clear previous AR line items (replace-all strategy)
+  await prisma.arLineItem.deleteMany({});
+
+  // Pre-fetch all projects for matching
+  const projects = await prisma.project.findMany({
+    select: { id: true, externalId: true },
+  });
+  const projectByJobNo = new Map(projects.map((p) => [p.externalId, p.id]));
+
+  for (const item of items) {
+    const jobNo = extractJobNo(item.Description);
+    const projectId = jobNo ? projectByJobNo.get(jobNo) ?? null : null;
+    const isMatched = projectId !== null;
+
+    // Generate a stable invoice number if missing
+    const invoiceNumber = item.InvoiceNumber || `unknown-${item.AccountName}-${item.Amount}`;
+
+    await prisma.arLineItem.create({
+      data: {
+        invoiceNumber,
+        accountName: item.AccountName || "",
+        description: item.Description || null,
+        amount: item.Amount,
+        invoiceDate: parseExactDate(item.InvoiceDate),
+        dueDate: parseExactDate(item.DueDate),
+        currencyCode: item.CurrencyCode || "EUR",
+        jobNo,
+        projectId,
+        matchStatus: isMatched ? "matched" : "unmatched",
+        snapshotDate: now,
+      },
+    });
+
+    if (isMatched && projectId) {
+      matched++;
+      await updateMilestoneFromAr(projectId, item);
+    } else {
+      unmatched++;
+    }
+  }
+
+  return { matched, unmatched };
+}
+
+/**
+ * Update the best-matching pending milestone to "invoiced" using AR data.
+ * Matches by amount (within 10% tolerance), preferring closest match.
+ * Uses "1 of 2" / "2 of 2" in description to target the right milestone.
+ */
+async function updateMilestoneFromAr(
+  projectId: string,
+  arItem: ExactReceivable
+): Promise<void> {
+  const milestones = await prisma.paymentMilestone.findMany({
+    where: { projectId, status: "pending" },
+    orderBy: { expectedDate: "asc" },
+  });
+
+  if (milestones.length === 0) return;
+
+  // Try to identify which milestone from description ("1 of 2" = 1st, "2 of 2" = final)
+  const desc = arItem.Description || "";
+  let targetLabel: string | null = null;
+  if (/1\s*of\s*2/i.test(desc)) targetLabel = "1st Payment";
+  else if (/2\s*of\s*2/i.test(desc)) targetLabel = "Final Payment";
+
+  // Find best matching milestone
+  let bestMatch = milestones[0];
+  let bestDiff = Infinity;
+
+  for (const ms of milestones) {
+    // If we identified a target label, prefer that
+    if (targetLabel && ms.label === targetLabel) {
+      bestMatch = ms;
+      break;
+    }
+    // Otherwise match by closest amount (within 10% tolerance)
+    const diff = Math.abs(ms.amount - arItem.Amount);
+    const tolerance = ms.amount * 0.1;
+    if (diff < bestDiff && diff <= tolerance) {
+      bestDiff = diff;
+      bestMatch = ms;
+    }
+  }
+
+  // Update milestone to invoiced with actual Exact due date
+  await prisma.paymentMilestone.update({
+    where: { id: bestMatch.id },
+    data: {
+      status: "invoiced",
+      invoiceId: arItem.InvoiceNumber || null,
+      expectedDate: parseExactDate(arItem.DueDate),
+    },
+  });
+}
+
 /**
  * Sync financial position from Exact Online into a snapshot.
+ * Also matches AR items to projects and stores line items.
  */
 export async function syncExactOnline(): Promise<{
   bankBalance: number;
   totalAr: number;
   totalAp: number;
+  arMatching: { matched: number; unmatched: number };
 }> {
   const [receivables, payables, bankBalance] = await Promise.all([
     fetchReceivables(),
@@ -333,7 +470,7 @@ export async function syncExactOnline(): Promise<{
     fetchBankBalance(),
   ]);
 
-  // Store snapshot
+  // Store snapshot (keep for audit/display)
   await prisma.financialSnapshot.create({
     data: {
       snapshotDate: new Date(),
@@ -344,10 +481,14 @@ export async function syncExactOnline(): Promise<{
     },
   });
 
+  // Match AR items to projects and store line items
+  const arMatching = await matchAndStoreArItems(receivables.items);
+
   return {
     bankBalance,
     totalAr: receivables.total,
     totalAp: payables.total,
+    arMatching,
   };
 }
 

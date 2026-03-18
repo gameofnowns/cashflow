@@ -15,6 +15,17 @@ const FIELD_IDS = {
   finalPaymentDate: "Final Payment Received Date",
   paymentTerms: "Payment Terms",
   fourLetter: "4LETTER",
+  // Timing fields
+  leadtimeWeeks: "Leadtime (week)",
+  productionEta: "Prod. ETA",
+  prodFinished: "Prod. Finished Date",
+  dueDateShops: "Due Date Shops",
+  shopsStatus: "Shops Status",
+  approvedShops: "Approved Shops",
+  recordSetStatus: "Record Set Status",
+  dueDate: "Due Date",
+  contractDeadline: "Contract Deadline",
+  actualDispatch: "Actual Dispatch",
 } as const;
 
 // Project Type dropdown option IDs → our type codes
@@ -76,6 +87,7 @@ interface ClickUpTask {
   custom_fields: ClickUpCustomField[];
   date_created: string;
   date_updated: string;
+  due_date: string | null;
 }
 
 interface ClickUpCustomField {
@@ -95,6 +107,19 @@ export interface ParsedProject {
   totalValue: number;
   status: string;
   milestones: ParsedMilestone[];
+  // Timing fields
+  quoteDate: Date | null;
+  leadtimeWeeks: number | null;
+  productionEta: Date | null;
+  prodFinishedDate: Date | null;
+  dueDateShops: Date | null;
+  shopsStatus: string | null;
+  approvedShopsDate: Date | null;
+  recordSetStatus: string | null;
+  dueDate: Date | null;
+  contractDeadline: Date | null;
+  actualDispatch: Date | null;
+  paymentTerms: string | null;
 }
 
 export interface ParsedMilestone {
@@ -139,6 +164,37 @@ function getDropdownValue(field: ClickUpCustomField | undefined): string | null 
   if (!options) return null;
   const option = options.find((o) => o.orderindex === idx);
   return option?.id ?? null;
+}
+
+/** Get the display name of a dropdown option (e.g., "Approved", "In Progress") */
+function getDropdownLabel(field: ClickUpCustomField | undefined): string | null {
+  if (!field || field.value === null || field.value === undefined) return null;
+  const idx = Number(field.value);
+  const options = field.type_config?.options;
+  if (!options) return null;
+  const option = options.find((o) => o.orderindex === idx);
+  return option?.name ?? null;
+}
+
+/** Extract a date from a ClickUp custom field (stored as ms timestamp string) */
+function getDateValue(field: ClickUpCustomField | undefined): Date | null {
+  if (!field?.value) return null;
+  const ts = Number(field.value);
+  if (isNaN(ts)) return null;
+  return new Date(ts);
+}
+
+/** Extract a number from a ClickUp custom field */
+function getNumberValue(field: ClickUpCustomField | undefined): number | null {
+  if (!field?.value && field?.value !== 0) return null;
+  const n = Number(field.value);
+  return isNaN(n) ? null : n;
+}
+
+/** Extract a text value from a ClickUp custom field */
+function getTextValue(field: ClickUpCustomField | undefined): string | null {
+  if (!field?.value) return null;
+  return String(field.value);
 }
 
 /**
@@ -299,6 +355,24 @@ export async function parseTask(task: ClickUpTask): Promise<ParsedProject | null
     });
   }
 
+  // Extract timing fields
+  const leadtimeWeeks = getNumberValue(getCustomField(task, FIELD_IDS.leadtimeWeeks));
+  const productionEta = getDateValue(getCustomField(task, FIELD_IDS.productionEta));
+  const prodFinishedDate = getDateValue(getCustomField(task, FIELD_IDS.prodFinished));
+  const dueDateShops = getDateValue(getCustomField(task, FIELD_IDS.dueDateShops));
+  const shopsStatus = getDropdownLabel(getCustomField(task, FIELD_IDS.shopsStatus));
+  const approvedShopsDate = getDateValue(getCustomField(task, FIELD_IDS.approvedShops));
+  const recordSetStatus = getDropdownLabel(getCustomField(task, FIELD_IDS.recordSetStatus));
+  const contractDeadline = getDateValue(getCustomField(task, FIELD_IDS.contractDeadline));
+  const actualDispatch = getDateValue(getCustomField(task, FIELD_IDS.actualDispatch));
+  const paymentTermsText = getTextValue(getCustomField(task, FIELD_IDS.paymentTerms));
+
+  // Due date: ClickUp built-in field (top-level), not a custom field
+  const dueDate = task.due_date ? new Date(Number(task.due_date)) : null;
+
+  // Quote date: use task creation date as proxy (project created at kick-off after quote signed)
+  const quoteDate = task.date_created ? new Date(Number(task.date_created)) : null;
+
   return {
     externalId: jobNo.trim(),
     name: task.name,
@@ -306,5 +380,17 @@ export async function parseTask(task: ClickUpTask): Promise<ParsedProject | null
     totalValue,
     status: statusName,
     milestones,
+    quoteDate,
+    leadtimeWeeks,
+    productionEta,
+    prodFinishedDate,
+    dueDateShops,
+    shopsStatus,
+    approvedShopsDate,
+    recordSetStatus,
+    dueDate,
+    contractDeadline,
+    actualDispatch,
+    paymentTerms: paymentTermsText || ocrPaymentTerms,
   };
 }
