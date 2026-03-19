@@ -9,8 +9,8 @@ export const COGS_RATES: Record<ProjectType, number> = {
   Z: 0.5,
 };
 
-export const COGS_BUFFER = 1.1;
-export const VAT_RETURN_RATE = 0.1;
+export const COGS_BUFFER = 1.21; // Dutch VAT rate (21%) — changed from 1.10 per v2 spec
+export const VAT_RETURN_RATE = 0.21 / 1.21; // VAT component recoverable from COGS (≈17.36%)
 
 export interface MonthlyBreakdown {
   month: string; // YYYY-MM

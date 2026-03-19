@@ -373,7 +373,7 @@ async function matchAndStoreArItems(
     const isMatched = projectId !== null;
 
     // Generate a stable invoice number if missing
-    const invoiceNumber = item.InvoiceNumber || `unknown-${item.AccountName}-${item.Amount}`;
+    const invoiceNumber = String(item.InvoiceNumber || `unknown-${item.AccountName}-${item.Amount}`);
 
     await prisma.arLineItem.create({
       data: {
@@ -448,7 +448,7 @@ async function updateMilestoneFromAr(
     where: { id: bestMatch.id },
     data: {
       status: "invoiced",
-      invoiceId: arItem.InvoiceNumber || null,
+      invoiceId: arItem.InvoiceNumber ? String(arItem.InvoiceNumber) : null,
       expectedDate: parseExactDate(arItem.DueDate),
     },
   });

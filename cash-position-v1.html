@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NOWN — Cash Position Dashboard</title>
+<style>
+  :root {
+    --bg:#EAE6DF;--ink:#1A1814;--sub:#6B6560;--dim:#A09890;--ghost:#C8C2B8;
+    --orange:#FE6337;--blue:#0086D5;--green:#82D780;--yellow:#FAE791;
+    --terracotta:#BD6A55;--sage:#8F9A8F;--blue-grey:#D8E1EB;--bronze:#887550;
+    --blush:#F7E5DF;
+    --grid:1px solid #1A1814;
+    --font:'Replica','Helvetica Neue',Arial,sans-serif;
+    --mono:'SF Mono','Fira Code',Consolas,monospace;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:var(--font);background:var(--bg);color:var(--ink);line-height:1.0;}
+
+  /* Header — matches NOWN website nav structure */
+  .header{display:flex;align-items:center;padding:0;border-bottom:var(--grid);}
+  .header-logo{padding:10px 18px;border-right:var(--grid);display:flex;align-items:center;}
+  .header-logo svg{height:28px;width:auto;}
+  .header-right{display:flex;align-items:center;gap:14px;margin-left:auto;padding:10px 18px;}
+  .timestamp{font-size:7px;font-weight:300;letter-spacing:1.5px;color:var(--dim);}
+  .btn{font-family:var(--font);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:2px;padding:8px 16px;background:var(--ink);color:var(--bg);border:none;cursor:pointer;transition:background 150ms;}
+  .btn:hover{background:var(--orange);color:#fff;}
+
+  /* Hero bar — CASHFLOWS replacing SIMPLY ELEVATED */
+  .hero-bar{display:grid;grid-template-columns:1fr 2fr 1fr;border-bottom:var(--grid);}
+  .hero-title{padding:14px 18px;font-size:28px;font-weight:700;text-transform:uppercase;letter-spacing:6px;line-height:0.70;border-right:var(--grid);display:flex;align-items:center;}
+  .hero-mid{padding:14px 18px;border-right:var(--grid);}
+  .hero-desc{padding:14px 18px;font-size:9px;font-weight:300;letter-spacing:0.3px;line-height:1.7;color:var(--sub);display:flex;align-items:center;}
+
+  /* Status indicators */
+  .status-strip{display:flex;gap:0;border-bottom:var(--grid);}
+  .status-item{flex:1;padding:8px 18px;border-right:var(--grid);display:flex;align-items:center;gap:8px;}
+  .status-item:last-child{border-right:none;}
+  .status-dot{width:8px;height:8px;display:inline-block;}
+  .status-dot.ok{background:var(--green);}
+  .status-dot.warn{background:var(--yellow);}
+  .status-dot.off{background:var(--terracotta);}
+  .status-name{font-size:7.5px;font-weight:700;text-transform:uppercase;letter-spacing:3px;color:var(--sub);}
+  .status-detail{font-size:7px;font-weight:300;letter-spacing:0.3px;color:var(--dim);margin-left:auto;}
+  .sync-btn{font-family:var(--font);font-size:7px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;padding:3px 8px;background:var(--ink);color:var(--bg);border:none;cursor:pointer;margin-left:6px;transition:background 150ms;}
+  .sync-btn:hover{background:var(--orange);color:#fff;}
+
+  /* Page subtitle (below status) */
+  .page-subtitle{padding:8px 18px 14px;font-size:9px;font-weight:300;letter-spacing:0.3px;line-height:1.7;color:var(--sub);border-bottom:var(--grid);}
+
+  /* KPI strip */
+  .kpi-strip{display:grid;grid-template-columns:repeat(6,1fr);border-bottom:var(--grid);}
+  .kpi{padding:14px 18px;border-right:var(--grid);}
+  .kpi:last-child{border-right:none;}
+  .kpi-label{font-size:7.5px;font-weight:700;text-transform:uppercase;letter-spacing:3.5px;line-height:1.4;color:var(--sub);margin-bottom:6px;}
+  .kpi-value{font-size:22px;font-weight:700;letter-spacing:2px;line-height:0.75;color:var(--ink);font-family:var(--mono);}
+  .kpi-caption{font-size:7px;font-weight:300;letter-spacing:1.5px;line-height:1.6;color:var(--dim);margin-top:6px;}
+
+  /* Toggle matrix */
+  .toggle-section{padding:14px 18px;border-bottom:var(--grid);display:flex;flex-wrap:wrap;gap:8px;align-items:center;}
+  .toggle-group{display:flex;align-items:center;gap:4px;}
+  .toggle-group-label{font-size:7.5px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:var(--sub);margin-right:4px;}
+  .toggle-btn{font-family:var(--font);font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;padding:5px 10px;border:var(--grid);background:transparent;color:var(--ink);cursor:pointer;transition:all 150ms;}
+  .toggle-btn.active{background:var(--ink);color:var(--bg);}
+  .toggle-btn:hover{background:var(--orange);color:#fff;}
+  .toggle-btn .dot{display:inline-block;width:6px;height:6px;margin-right:4px;vertical-align:middle;}
+  .separator{width:1px;height:24px;background:var(--ghost);margin:0 6px;}
+
+  /* Preset buttons */
+  .preset-section{padding:10px 18px;border-bottom:var(--grid);display:flex;gap:8px;align-items:center;}
+  .preset-label{font-size:7.5px;font-weight:700;text-transform:uppercase;letter-spacing:3.5px;color:var(--sub);margin-right:8px;}
+  .preset-btn{font-family:var(--font);font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;padding:5px 12px;border:var(--grid);background:transparent;color:var(--ink);cursor:pointer;transition:all 150ms;}
+  .preset-btn:hover{background:var(--orange);color:#fff;}
+  .preset-btn.active{background:var(--ink);color:var(--bg);}
+
+  /* Bank balance input */
+  .bank-section{padding:10px 18px;border-bottom:var(--grid);display:flex;align-items:center;gap:12px;}
+  .bank-label{font-size:7.5px;font-weight:700;text-transform:uppercase;letter-spacing:3.5px;color:var(--sub);}
+  .bank-input{font-family:var(--mono);font-size:11px;font-weight:700;padding:6px 10px;border:var(--grid);background:var(--bg);color:var(--ink);width:140px;letter-spacing:1px;}
+  .bank-input:focus{outline:2px solid var(--orange);}
+  .bank-source{font-size:7px;font-weight:300;color:var(--dim);letter-spacing:0.3px;}
+
+  /* Chart */
+  .chart-section{padding:18px;border-bottom:var(--grid);}
+  .chart-title{font-size:18px;font-weight:700;text-transform:uppercase;letter-spacing:4px;margin-bottom:4px;}
+  .chart-subtitle{font-size:9px;font-weight:300;color:var(--sub);letter-spacing:0.3px;margin-bottom:18px;}
+  .chart-canvas{position:relative;height:400px;margin-left:70px;border-left:var(--grid);border-bottom:var(--grid);}
+
+  .chart-legend{display:flex;flex-wrap:wrap;gap:14px;margin-top:14px;padding-top:10px;border-top:var(--grid);}
+  .legend-item{display:flex;align-items:center;gap:6px;font-size:7.5px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:var(--sub);}
+  .legend-dot{width:8px;height:8px;}
+
+  /* Y-axis */
+  .y-tick{position:absolute;right:calc(100% + 8px);font-size:7.5px;font-weight:300;color:var(--dim);font-family:var(--mono);letter-spacing:0.5px;transform:translateY(-50%);white-space:nowrap;}
+  .grid-h{position:absolute;left:0;right:0;height:1px;background:var(--ghost);}
+  .zero-line{position:absolute;left:0;right:0;height:1px;background:var(--dim);opacity:0.6;}
+
+  /* Bars */
+  .month-col{position:absolute;bottom:0;top:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;}
+  .bar-up,.bar-down{position:absolute;display:flex;flex-direction:column-reverse;align-items:center;}
+  .bar-seg{min-height:1px;transition:opacity 150ms;cursor:pointer;}
+  .bar-seg:hover{opacity:0.7;}
+
+  /* Cash line (SVG overlay) */
+  .line-overlay{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;}
+
+  /* Month labels */
+  .month-label{position:absolute;bottom:-20px;font-size:7.5px;font-weight:300;color:var(--dim);letter-spacing:0.5px;transform:translateX(-50%);}
+
+  /* Section header */
+  .section-header{padding:18px 18px 10px;font-size:18px;font-weight:700;text-transform:uppercase;letter-spacing:4px;line-height:0.75;border-bottom:var(--grid);}
+
+  /* Table */
+  table{width:100%;border-collapse:collapse;font-size:11px;}
+  thead th{text-align:left;padding:10px 14px;font-weight:700;font-size:7.5px;text-transform:uppercase;letter-spacing:3.5px;line-height:1.4;color:var(--bg);background:var(--ink);border-right:1px solid var(--sub);border-bottom:var(--grid);}
+  thead th:last-child{border-right:none;}
+  thead th.right{text-align:right;}
+  tbody tr{border-bottom:var(--grid);}
+  tbody tr:hover{background:var(--orange);color:#fff;}
+  tbody tr:hover td{color:#fff;}
+  tbody tr:hover .dim-cell{color:rgba(255,255,255,0.7);}
+  tbody td{padding:10px 14px;border-right:var(--grid);font-weight:700;letter-spacing:2px;line-height:1.2;}
+  tbody td:last-child{border-right:none;}
+  tbody td.right{text-align:right;font-family:var(--mono);}
+  tbody td.dim-cell{color:var(--dim);font-weight:300;}
+  tbody td.forecast-val{color:var(--terracotta);font-family:var(--mono);text-align:right;}
+  tfoot td{padding:10px 14px;border-right:var(--grid);font-weight:700;letter-spacing:2px;border-top:2px solid var(--ink);}
+  tfoot td:last-child{border-right:none;}
+  tfoot td.right{text-align:right;font-family:var(--mono);}
+
+  /* Tooltip */
+  .tooltip{position:fixed;background:var(--bg);border:var(--grid);padding:10px 14px;font-size:9px;font-weight:300;color:var(--ink);z-index:1000;pointer-events:none;display:none;max-width:300px;line-height:1.5;}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-logo">
+    <svg viewBox="0 0 180 40" xmlns="http://www.w3.org/2000/svg">
+      <!-- NOWN logotype — angular geometric letterforms -->
+      <path d="M0 38V2h5.5l16 24.5V2h5.5v36h-5.5L5.5 13.5V38H0z" fill="#1A1814"/>
+      <path d="M35 20c0-11 8.5-19 19.5-19S74 9 74 20s-8.5 19-19.5 19S35 31 35 20zm33 0c0-8-5.5-14-13.5-14S41 12 41 20s5.5 14 13.5 14S68 28 68 20z" fill="#1A1814"/>
+      <path d="M80 2h6l8.5 25L103 2h4l8.5 25L124 2h6l-13 36h-5L104 14.5 95.5 38h-5L80 2z" fill="#1A1814"/>
+      <path d="M135 38V2h5.5l16 24.5V2h5.5v36h-5.5L141 13.5V38H135z" fill="#1A1814"/>
+    </svg>
+  </div>
+  <div class="header-right">
+    <span class="timestamp" id="ts"></span>
+    <button class="btn" onclick="loadData()">Refresh</button>
+  </div>
+</div>
+
+<div class="hero-bar">
+  <div class="hero-title">CASHFLOWS</div>
+  <div class="hero-mid"></div>
+  <div class="hero-desc">12-month rolling forecast — toggle series on/off to model scenarios</div>
+</div>
+
+<div class="status-strip" id="status-strip">
+  <div class="status-item"><span class="status-dot off"></span><span class="status-name">Dynamics</span><span class="status-detail">checking...</span></div>
+  <div class="status-item"><span class="status-dot off"></span><span class="status-name">ClickUp</span><span class="status-detail">checking...</span></div>
+  <div class="status-item"><span class="status-dot off"></span><span class="status-name">Exact Online</span><span class="status-detail">checking...</span></div>
+</div>
+
+<div class="bank-section">
+  <span class="bank-label">Opening Balance</span>
+  <input type="text" class="bank-input" id="bank-input" placeholder="e.g. 82000" value="">
+  <button class="btn" style="font-size:8px;padding:6px 12px" onclick="loadData()">Update</button>
+  <span class="bank-source" id="bank-source"></span>
+</div>
+
+<div class="kpi-strip" id="kpis"></div>
+
+<div class="preset-section">
+  <span class="preset-label">Presets</span>
+  <button class="preset-btn" onclick="applyPreset('conservative')">Conservative</button>
+  <button class="preset-btn" onclick="applyPreset('likely')">Likely</button>
+  <button class="preset-btn" onclick="applyPreset('full')">Full Forecast</button>
+  <button class="preset-btn" onclick="applyPreset('weighted')">Weighted</button>
+  <button class="preset-btn" onclick="applyPreset('ar-only')">AR Only</button>
+</div>
+
+<div class="toggle-section" id="toggles"></div>
+
+<div class="chart-section">
+  <div class="chart-title">12-MONTH CASH POSITION</div>
+  <div class="chart-subtitle">stacked inflows (up) and outflows (down) with derived cash position line</div>
+  <div class="chart-canvas" id="chart"></div>
+  <div class="chart-legend" id="legend"></div>
+</div>
+
+<div class="section-header">MONTHLY BREAKDOWN</div>
+<table>
+  <thead>
+    <tr>
+      <th>Month</th>
+      <th class="right">Current AR</th>
+      <th class="right">Billable AR</th>
+      <th class="right">Phase 1</th>
+      <th class="right">Phase 2</th>
+      <th class="right">Phase 3</th>
+      <th class="right">COGS</th>
+      <th class="right">VAT</th>
+      <th class="right">Overhead</th>
+      <th class="right">Cash Position</th>
+    </tr>
+  </thead>
+  <tbody id="table-body"></tbody>
+  <tfoot id="table-foot"></tfoot>
+</table>
+
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+const API = window.location.origin;
+const EUR = (n) => {
+  if (n == null || isNaN(n)) return '—';
+  const abs = Math.abs(n);
+  const f = abs.toLocaleString('de-DE',{minimumFractionDigits:0,maximumFractionDigits:0});
+  return (n < 0 ? '- ' : '') + 'EUR ' + f;
+};
+const SHORT = (n) => {
+  const abs = Math.abs(n);
+  const sign = n < 0 ? '-' : '';
+  if (abs >= 1000000) return sign + 'EUR ' + (abs/1000000).toFixed(1) + 'M';
+  if (abs >= 1000) return sign + 'EUR ' + Math.round(abs/1000) + 'K';
+  return EUR(n);
+};
+const monthLabel = (mk) => {
+  const [y,mo] = mk.split('-');
+  return ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(mo)-1] + ' ' + y.slice(2);
+};
+
+// ─── State ──────────────────────────────────────────────────
+let DATA = null;
+let TOGGLES = {
+  currentAr: true,
+  billableAr: true,
+  phase1: false,
+  phase2: false,
+  phase3: true,
+  cogsWon: true,
+  cogsPipeline: true,
+  vat: true,
+  overhead: true,
+  weighted: false,
+};
+
+const SERIES = [
+  { id:'currentAr',    label:'Current AR',       color:'var(--green)',     type:'inflow' },
+  { id:'billableAr',   label:'Billable AR',      color:'var(--blue)',      type:'inflow' },
+  { id:'phase1',       label:'Phase 1 (10%)',     color:'var(--ghost)',     type:'inflow' },
+  { id:'phase2',       label:'Phase 2 (30%)',     color:'var(--yellow)',    type:'inflow' },
+  { id:'phase3',       label:'Phase 3 (90%)',     color:'var(--blue-grey)', type:'inflow' },
+  { id:'cogsWon',      label:'COGS (Won)',        color:'var(--bronze)',    type:'outflow' },
+  { id:'cogsPipeline', label:'COGS (Pipeline)',   color:'var(--terracotta)',type:'outflow' },
+  { id:'vat',          label:'VAT Returns',       color:'var(--sage)',      type:'inflow' },
+  { id:'overhead',     label:'Overhead',          color:'var(--blush)',     type:'outflow' },
+];
+
+// ─── Presets ────────────────────────────────────────────────
+function applyPreset(name) {
+  const all = (v) => { for (const k in TOGGLES) TOGGLES[k] = v; };
+  switch(name) {
+    case 'conservative':
+      all(true); TOGGLES.phase1=false; TOGGLES.phase2=false; TOGGLES.phase3=false; TOGGLES.cogsPipeline=false; TOGGLES.weighted=false;
+      break;
+    case 'likely':
+      all(true); TOGGLES.phase1=false; TOGGLES.phase2=false; TOGGLES.phase3=true; TOGGLES.weighted=false;
+      break;
+    case 'full':
+      all(true); TOGGLES.weighted=false;
+      break;
+    case 'weighted':
+      all(true); TOGGLES.weighted=true;
+      break;
+    case 'ar-only':
+      all(false); TOGGLES.currentAr=true; TOGGLES.billableAr=true; TOGGLES.phase3=true;
+      break;
+  }
+  render();
+}
+
+// ─── Toggle UI ──────────────────────────────────────────────
+function renderToggles() {
+  const el = document.getElementById('toggles');
+  let html = '<span class="toggle-group-label">Inflows</span>';
+  SERIES.filter(s=>s.type==='inflow' && s.id!=='vat').forEach(s => {
+    const active = TOGGLES[s.id] ? 'active' : '';
+    html += `<button class="toggle-btn ${active}" onclick="toggle('${s.id}')"><span class="dot" style="background:${s.color}"></span>${s.label}</button>`;
+  });
+  html += '<div class="separator"></div><span class="toggle-group-label">Outflows</span>';
+  SERIES.filter(s=>s.type==='outflow').forEach(s => {
+    const active = TOGGLES[s.id] ? 'active' : '';
+    html += `<button class="toggle-btn ${active}" onclick="toggle('${s.id}')"><span class="dot" style="background:${s.color}"></span>${s.label}</button>`;
+  });
+  // VAT
+  const vatS = SERIES.find(s=>s.id==='vat');
+  html += `<button class="toggle-btn ${TOGGLES.vat?'active':''}" onclick="toggle('vat')"><span class="dot" style="background:${vatS.color}"></span>${vatS.label}</button>`;
+  html += '<div class="separator"></div>';
+  html += `<button class="toggle-btn ${TOGGLES.weighted?'active':''}" onclick="toggle('weighted')" style="border-color:var(--orange)">Weighted Mode</button>`;
+  el.innerHTML = html;
+}
+
+function toggle(id) {
+  TOGGLES[id] = !TOGGLES[id];
+  render();
+}
+
+// ─── Compute ────────────────────────────────────────────────
+function computeMonths() {
+  if (!DATA) return [];
+  const w = TOGGLES.weighted;
+  return DATA.months.map(m => {
+    let inflow = 0, outflow = 0;
+    const cAr = TOGGLES.currentAr ? m.currentAr : 0;
+    const bAr = TOGGLES.billableAr ? m.billableAr : 0;
+    const p1 = TOGGLES.phase1 ? (w ? m.pipelinePhase1 * 0.10 : m.pipelinePhase1) : 0;
+    const p2 = TOGGLES.phase2 ? (w ? m.pipelinePhase2 * 0.30 : m.pipelinePhase2) : 0;
+    const p3 = TOGGLES.phase3 ? (w ? m.pipelinePhase3 * 0.90 : m.pipelinePhase3) : 0;
+    const vat = TOGGLES.vat ? m.vatReturn : 0;
+
+    inflow = cAr + bAr + p1 + p2 + p3 + vat;
+
+    const cW = TOGGLES.cogsWon ? m.cogsWon : 0;
+    // Pipeline COGS: only for active pipeline phases
+    let cP = 0;
+    if (TOGGLES.cogsPipeline) {
+      if (TOGGLES.phase1) cP += w ? m.cogsPhase1 * 0.10 : m.cogsPhase1;
+      if (TOGGLES.phase2) cP += w ? m.cogsPhase2 * 0.30 : m.cogsPhase2;
+      if (TOGGLES.phase3) cP += w ? m.cogsPhase3 * 0.90 : m.cogsPhase3;
+    }
+    const oh = TOGGLES.overhead ? m.overhead : 0;
+    outflow = cW + cP + oh;
+
+    return {
+      month: m.month,
+      currentAr: cAr, billableAr: bAr,
+      phase1: p1, phase2: p2, phase3: p3,
+      cogsWon: cW, cogsPipeline: cP,
+      vat, overhead: oh,
+      inflow, outflow,
+      net: inflow - outflow,
+    };
+  });
+}
+
+// ─── Render ─────────────────────────────────────────────────
+function render() {
+  if (!DATA) return;
+  renderToggles();
+  const computed = computeMonths();
+  renderKPIs(computed);
+  renderChart(computed);
+  renderTable(computed);
+  renderLegend();
+}
+
+function renderKPIs(computed) {
+  const bank = DATA.bankBalance;
+  let cash = bank;
+  const totIn = computed.reduce((s,m)=>s+m.inflow,0);
+  const totOut = computed.reduce((s,m)=>s+m.outflow,0);
+  // 3-month
+  const m3 = computed.slice(0,3).reduce((s,m)=>s+m.net,0);
+  // End position
+  const endPos = bank + computed.reduce((s,m)=>s+m.net,0);
+
+  document.getElementById('kpis').innerHTML = `
+    <div class="kpi">
+      <div class="kpi-label">Opening Balance</div>
+      <div class="kpi-value">${SHORT(bank)}</div>
+      <div class="kpi-caption">${DATA.bankBalanceSource === 'manual' ? 'manual entry' : 'from exact online'}</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">3-Month Net</div>
+      <div class="kpi-value">${SHORT(bank + m3)}</div>
+      <div class="kpi-caption">cash position in 3 months</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">12-Month End</div>
+      <div class="kpi-value">${SHORT(endPos)}</div>
+      <div class="kpi-caption">projected end position</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Total Inflows</div>
+      <div class="kpi-value">${SHORT(totIn)}</div>
+      <div class="kpi-caption">active series only</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Total Outflows</div>
+      <div class="kpi-value">${SHORT(totOut)}</div>
+      <div class="kpi-caption">active series only</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">12M Net</div>
+      <div class="kpi-value">${SHORT(totIn - totOut)}</div>
+      <div class="kpi-caption">inflows minus outflows</div>
+    </div>
+  `;
+}
+
+function renderChart(computed) {
+  const el = document.getElementById('chart');
+  el.innerHTML = '';
+  const H = 400;
+  const W = el.offsetWidth || 800;
+
+  // Find max inflow and max outflow for scale
+  let maxIn = 0, maxOut = 0;
+  computed.forEach(m => {
+    maxIn = Math.max(maxIn, m.inflow);
+    maxOut = Math.max(maxOut, m.outflow);
+  });
+  // Also consider cash line
+  let cash = DATA.bankBalance;
+  let cashMin = cash, cashMax = cash;
+  computed.forEach(m => { cash += m.net; cashMin = Math.min(cashMin, cash); cashMax = Math.max(cashMax, cash); });
+
+  // Scale: top half for inflows + cash line, bottom for outflows
+  const totalRange = Math.max(maxIn, cashMax - DATA.bankBalance + maxIn * 0.1) + maxOut;
+  const zeroY = totalRange > 0 ? (Math.max(maxIn, cashMax) / totalRange) * H : H * 0.6;
+  const scale = totalRange > 0 ? H / totalRange : 1;
+
+  // Y-axis ticks
+  const maxVal = Math.max(maxIn, maxOut, Math.abs(cashMax), Math.abs(cashMin));
+  const tickStep = maxVal > 0 ? Math.pow(10, Math.floor(Math.log10(maxVal))) : 100000;
+  const niceStep = maxVal / tickStep > 5 ? tickStep * 2 : tickStep;
+
+  for (let v = 0; v <= maxIn * 1.1; v += niceStep) {
+    if (v === 0) continue;
+    const y = zeroY - v * scale;
+    if (y < 0) break;
+    el.innerHTML += `<div class="y-tick" style="top:${y}px">${SHORT(v)}</div>`;
+    el.innerHTML += `<div class="grid-h" style="top:${y}px"></div>`;
+  }
+  for (let v = niceStep; v <= maxOut * 1.1; v += niceStep) {
+    const y = zeroY + v * scale;
+    if (y > H) break;
+    el.innerHTML += `<div class="y-tick" style="top:${y}px">${SHORT(-v)}</div>`;
+    el.innerHTML += `<div class="grid-h" style="top:${y}px"></div>`;
+  }
+
+  // Zero line
+  el.innerHTML += `<div class="zero-line" style="top:${zeroY}px"></div>`;
+  el.innerHTML += `<div class="y-tick" style="top:${zeroY}px;font-weight:700">0</div>`;
+
+  // Bars
+  const n = computed.length;
+  const barW = Math.min(40, (W / n) - 8);
+  const step = W / n;
+
+  computed.forEach((m, i) => {
+    const x = i * step + step / 2;
+
+    // Stacked inflow bars (upward from zero)
+    const inflowParts = [
+      { val: m.currentAr, color: '#82D780' },
+      { val: m.billableAr, color: '#0086D5' },
+      { val: m.phase1, color: '#C8C2B8' },
+      { val: m.phase2, color: '#FAE791' },
+      { val: m.phase3, color: '#D8E1EB' },
+      { val: m.vat, color: '#8F9A8F' },
+    ].filter(p => p.val > 0);
+
+    let cumUp = 0;
+    inflowParts.forEach(p => {
+      const h = p.val * scale;
+      const y = zeroY - cumUp - h;
+      el.innerHTML += `<div class="bar-seg" style="position:absolute;left:${x - barW/2}px;top:${y}px;width:${barW}px;height:${h}px;background:${p.color};border:1px solid var(--ink)" title="${EUR(p.val)}"></div>`;
+      cumUp += h;
+    });
+
+    // Stacked outflow bars (downward from zero)
+    const outflowParts = [
+      { val: m.cogsWon, color: '#887550' },
+      { val: m.cogsPipeline, color: '#BD6A55' },
+      { val: m.overhead, color: '#F7E5DF' },
+    ].filter(p => p.val > 0);
+
+    let cumDown = 0;
+    outflowParts.forEach(p => {
+      const h = p.val * scale;
+      const y = zeroY + cumDown;
+      el.innerHTML += `<div class="bar-seg" style="position:absolute;left:${x - barW/2}px;top:${y}px;width:${barW}px;height:${h}px;background:${p.color};border:1px solid var(--ink)" title="${EUR(-p.val)}"></div>`;
+      cumDown += h;
+    });
+
+    // Month label
+    el.innerHTML += `<div class="month-label" style="left:${x}px">${monthLabel(m.month)}</div>`;
+  });
+
+  // Cash position line (SVG)
+  cash = DATA.bankBalance;
+  const points = computed.map((m, i) => {
+    cash += m.net;
+    const x = i * step + step / 2;
+    const y = zeroY - cash * scale;
+    return { x, y, cash };
+  });
+
+  // Add starting point
+  const startY = zeroY - DATA.bankBalance * scale;
+  let pathD = `M ${points[0].x - step/2} ${startY}`;
+  points.forEach(p => { pathD += ` L ${p.x} ${p.y}`; });
+
+  let svg = `<svg class="line-overlay" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">`;
+  svg += `<path d="${pathD}" fill="none" stroke="#1A1814" stroke-width="2.5" stroke-linecap="butt"/>`;
+  // Data points
+  points.forEach(p => {
+    svg += `<circle cx="${p.x}" cy="${p.y}" r="4" fill="#1A1814" stroke="#EAE6DF" stroke-width="1.5"/>`;
+  });
+  svg += `</svg>`;
+  el.innerHTML += svg;
+
+  // Value labels at start and end
+  el.innerHTML += `<div style="position:absolute;left:${points[0].x - step/2 - 4}px;top:${startY - 16}px;font-size:9px;font-weight:700;font-family:var(--mono);letter-spacing:1px">${SHORT(DATA.bankBalance)}</div>`;
+  const lastP = points[points.length - 1];
+  el.innerHTML += `<div style="position:absolute;left:${lastP.x + 6}px;top:${lastP.y - 6}px;font-size:9px;font-weight:700;font-family:var(--mono);letter-spacing:1px">${SHORT(lastP.cash)}</div>`;
+}
+
+function renderLegend() {
+  const el = document.getElementById('legend');
+  let html = '';
+  SERIES.forEach(s => {
+    if (!TOGGLES[s.id] && s.id !== 'vat') return;
+    if (s.id === 'vat' && !TOGGLES.vat) return;
+    html += `<div class="legend-item"><div class="legend-dot" style="background:${s.color};border:var(--grid)"></div>${s.label}</div>`;
+  });
+  html += `<div class="legend-item"><div class="legend-dot" style="background:var(--ink)"></div>Cash Position</div>`;
+  el.innerHTML = html;
+}
+
+function renderTable(computed) {
+  const tbody = document.getElementById('table-body');
+  const tfoot = document.getElementById('table-foot');
+  tbody.innerHTML = '';
+
+  let cash = DATA.bankBalance;
+  let tCar=0, tBar=0, tP1=0, tP2=0, tP3=0, tCogs=0, tVat=0, tOh=0;
+
+  computed.forEach(m => {
+    cash += m.net;
+    tCar += m.currentAr; tBar += m.billableAr;
+    tP1 += m.phase1; tP2 += m.phase2; tP3 += m.phase3;
+    tCogs += m.cogsWon + m.cogsPipeline;
+    tVat += m.vat; tOh += m.overhead;
+
+    const val = (n) => n > 0 ? EUR(n) : (n < 0 ? EUR(n) : '<span style="color:var(--ghost)">—</span>');
+    const fv = (n) => n > 0 ? `<span style="color:var(--terracotta)">${EUR(n)}</span>` : '<span style="color:var(--ghost)">—</span>';
+
+    tbody.innerHTML += `<tr>
+      <td>${monthLabel(m.month)}</td>
+      <td class="right">${val(m.currentAr)}</td>
+      <td class="right">${val(m.billableAr)}</td>
+      <td class="forecast-val">${fv(m.phase1)}</td>
+      <td class="forecast-val">${fv(m.phase2)}</td>
+      <td class="forecast-val">${fv(m.phase3)}</td>
+      <td class="right">${m.cogsWon + m.cogsPipeline > 0 ? EUR(-(m.cogsWon + m.cogsPipeline)) : '<span style="color:var(--ghost)">—</span>'}</td>
+      <td class="right">${val(m.vat)}</td>
+      <td class="right">${m.overhead > 0 ? EUR(-m.overhead) : '<span style="color:var(--ghost)">—</span>'}</td>
+      <td class="right" style="font-family:var(--mono);font-weight:700">${EUR(cash)}</td>
+    </tr>`;
+  });
+
+  tfoot.innerHTML = `<tr>
+    <td style="font-weight:700">TOTAL</td>
+    <td class="right">${EUR(tCar)}</td>
+    <td class="right">${EUR(tBar)}</td>
+    <td class="right forecast-val">${EUR(tP1)}</td>
+    <td class="right forecast-val">${EUR(tP2)}</td>
+    <td class="right forecast-val">${EUR(tP3)}</td>
+    <td class="right">${EUR(-(tCogs))}</td>
+    <td class="right">${EUR(tVat)}</td>
+    <td class="right">${EUR(-tOh)}</td>
+    <td class="right" style="font-family:var(--mono);font-weight:700">${EUR(cash)}</td>
+  </tr>`;
+}
+
+// ─── Data Loading ───────────────────────────────────────────
+async function loadData() {
+  document.getElementById('ts').textContent = 'last updated: ' + new Date().toLocaleString('nl-NL').toLowerCase();
+
+  const bankVal = document.getElementById('bank-input').value.trim();
+  const params = bankVal ? `?bankBalance=${encodeURIComponent(bankVal)}` : '';
+
+  try {
+    const res = await fetch(`${API}/api/dashboard/cash-position${params}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json();
+    if (json.error) throw new Error(json.error);
+    DATA = json;
+
+    // Populate bank input if not manually set
+    if (!bankVal && DATA.bankBalance > 0) {
+      document.getElementById('bank-input').value = Math.round(DATA.bankBalance);
+    }
+    document.getElementById('bank-source').textContent =
+      DATA.bankBalanceSource === 'manual' ? 'manual entry' :
+      DATA.bankBalanceSource === 'exact' ? 'from exact online' : 'no balance set';
+
+    render();
+  } catch(e) {
+    document.getElementById('kpis').innerHTML =
+      `<div class="kpi" style="grid-column:span 6"><div class="kpi-label">Error</div><div class="kpi-value" style="font-size:11px">${e.message}</div><div class="kpi-caption">check connection and try again</div></div>`;
+  }
+}
+
+// ─── Status Loading ─────────────────────────────────────────
+async function loadStatus() {
+  try {
+    const res = await fetch(`${API}/api/dashboard/status`);
+    if (!res.ok) return;
+    const s = await res.json();
+    if (s.error) return;
+
+    const el = document.getElementById('status-strip');
+    const fmtTime = (iso) => {
+      if (!iso) return 'never';
+      const d = new Date(iso);
+      const now = new Date();
+      const diff = now.getTime() - d.getTime();
+      const mins = Math.floor(diff / 60000);
+      if (mins < 1) return 'just now';
+      if (mins < 60) return mins + 'm ago';
+      const hrs = Math.floor(mins / 60);
+      if (hrs < 24) return hrs + 'h ago';
+      return d.toLocaleDateString('en-GB', {day:'numeric',month:'short'});
+    };
+
+    // Dynamics
+    const dOk = s.dynamics.connected && s.dynamics.tokenValid;
+    const dDetail = dOk ? `${s.dynamics.projectsSynced} pipeline opps` : 'not connected';
+
+    // ClickUp
+    const cOk = s.clickup.connected && s.clickup.projectsSynced > 0;
+    const cWarn = s.clickup.connected && s.clickup.projectsSynced === 0;
+    const cDetail = s.clickup.connected ? `${s.clickup.projectsSynced} projects, ${s.clickup.milestones} milestones` : 'no API token';
+
+    // Exact
+    const eOk = s.exact.connected && s.exact.tokenValid;
+    const eDetail = eOk
+      ? `bank EUR ${Math.round(s.exact.bankBalance||0).toLocaleString('de-DE')} · AR ${s.exact.arItems.matched}+${s.exact.arItems.unmatched} items · synced ${fmtTime(s.exact.lastSync)}`
+      : 'not connected';
+
+    el.innerHTML = `
+      <div class="status-item">
+        <span class="status-dot ${dOk ? 'ok' : 'off'}"></span>
+        <span class="status-name">Dynamics</span>
+        <span class="status-detail">${dDetail}</span>
+        <button class="sync-btn" onclick="runSync('dynamics')">Sync</button>
+      </div>
+      <div class="status-item">
+        <span class="status-dot ${cOk ? 'ok' : cWarn ? 'warn' : 'off'}"></span>
+        <span class="status-name">ClickUp</span>
+        <span class="status-detail">${cDetail}</span>
+        <button class="sync-btn" onclick="runSync('clickup')">Sync</button>
+      </div>
+      <div class="status-item">
+        <span class="status-dot ${eOk ? 'ok' : 'off'}"></span>
+        <span class="status-name">Exact Online</span>
+        <span class="status-detail">${eDetail}</span>
+        <button class="sync-btn" onclick="runSync('exact')">Sync</button>
+      </div>
+    `;
+  } catch(e) { /* silent */ }
+}
+
+async function runSync(provider) {
+  const btn = event.target;
+  btn.textContent = '...';
+  btn.disabled = true;
+  try {
+    const res = await fetch(`${API}/api/sync/${provider}`, { method: 'POST' });
+    const data = await res.json();
+    if (data.error) { btn.textContent = 'ERR'; setTimeout(()=>{btn.textContent='Sync';btn.disabled=false;},2000); return; }
+    btn.textContent = 'OK';
+    setTimeout(() => { btn.textContent = 'Sync'; btn.disabled = false; loadStatus(); loadData(); }, 1000);
+  } catch(e) {
+    btn.textContent = 'ERR';
+    setTimeout(()=>{btn.textContent='Sync';btn.disabled=false;},2000);
+  }
+}
+
+loadStatus();
+loadData();
+</script>
+</body>
+</html>
