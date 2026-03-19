@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NOWN — Closed Won Quotes</title>
+<style>
+  :root {
+    --bg:         #EAE6DF;
+    --ink:        #1A1814;
+    --sub:        #6B6560;
+    --dim:        #A09890;
+    --ghost:      #C8C2B8;
+    --orange:     #FE6337;
+    --blue:       #0086D5;
+    --green:      #82D780;
+    --yellow:     #FAE791;
+    --terracotta: #BD6A55;
+    --sage:       #8F9A8F;
+    --blue-grey:  #D8E1EB;
+    --bronze:     #887550;
+    --blush:      #F7E5DF;
+    --grid:       1px solid #1A1814;
+    --font:       'Replica', 'Helvetica Neue', Arial, sans-serif;
+    --mono:       'SF Mono', 'Fira Code', Consolas, monospace;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--ink);
+    line-height: 1.0;
+  }
+
+  /* ─── Header ─────────────────────────────── */
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 18px;
+    border-bottom: var(--grid);
+  }
+  .header-left { display: flex; align-items: center; gap: 14px; }
+  .logo {
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 3px;
+  }
+  .app-title {
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 3px;
+  }
+  .header-right { display: flex; align-items: center; gap: 14px; }
+  .timestamp {
+    font-size: 7px;
+    font-weight: 300;
+    letter-spacing: 1.5px;
+    color: var(--dim);
+  }
+  .refresh-btn {
+    font-family: var(--font);
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    padding: 8px 16px;
+    background: var(--ink);
+    color: var(--bg);
+    border: none;
+    cursor: pointer;
+    transition: background 150ms;
+  }
+  .refresh-btn:hover { background: var(--orange); color: #fff; }
+
+  /* ─── Page Title ─────────────────────────── */
+  .page-title {
+    padding: 24px 18px 8px;
+    font-size: 28px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 6px;
+    line-height: 0.70;
+  }
+  .page-subtitle {
+    padding: 8px 18px 20px;
+    font-size: 9px;
+    font-weight: 300;
+    letter-spacing: 0.3px;
+    line-height: 1.7;
+    color: var(--sub);
+  }
+
+  /* ─── KPI Strip ──────────────────────────── */
+  .kpi-strip {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    border-bottom: var(--grid);
+  }
+  .kpi {
+    padding: 14px 18px;
+    border-right: var(--grid);
+  }
+  .kpi:last-child { border-right: none; }
+  .kpi-label {
+    font-size: 7.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 3.5px;
+    line-height: 1.4;
+    color: var(--sub);
+    margin-bottom: 6px;
+  }
+  .kpi-value {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    line-height: 0.75;
+    color: var(--ink);
+    font-family: var(--mono);
+  }
+  .kpi-caption {
+    font-size: 7px;
+    font-weight: 300;
+    letter-spacing: 1.5px;
+    line-height: 1.6;
+    color: var(--dim);
+    margin-top: 6px;
+  }
+
+  /* ─── Section Header ─────────────────────── */
+  .section-header {
+    padding: 18px 18px 10px;
+    font-size: 18px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 4px;
+    line-height: 0.75;
+    border-bottom: var(--grid);
+  }
+
+  /* ─── Chart Container ────────────────────── */
+  .chart-section {
+    padding: 18px;
+    border-bottom: var(--grid);
+  }
+  .chart-title {
+    font-size: 18px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 4px;
+    margin-bottom: 4px;
+  }
+  .chart-subtitle {
+    font-size: 9px;
+    font-weight: 300;
+    color: var(--sub);
+    letter-spacing: 0.3px;
+    margin-bottom: 18px;
+  }
+  .chart-area {
+    position: relative;
+    height: 320px;
+    border-left: var(--grid);
+    border-bottom: var(--grid);
+    margin-left: 50px;
+  }
+  .chart-legend {
+    display: flex;
+    gap: 18px;
+    margin-top: 14px;
+    padding-top: 10px;
+    border-top: var(--grid);
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 7.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 3.5px;
+    color: var(--sub);
+  }
+  .legend-dot { width: 8px; height: 8px; }
+
+  /* ─── Bar styles ─────────────────────────── */
+  .bar-group {
+    position: absolute;
+    bottom: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .bar-stack {
+    display: flex;
+    flex-direction: column-reverse;
+    align-items: center;
+  }
+  .bar {
+    min-height: 2px;
+    transition: opacity 150ms;
+    cursor: pointer;
+  }
+  .bar:hover { opacity: 0.7; }
+  .bar-won { background: var(--green); }
+  .bar-pipeline { background: var(--blue); }
+  .bar-value-label {
+    font-size: 7.5px;
+    font-weight: 300;
+    color: var(--dim);
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+    font-family: var(--mono);
+  }
+  .bar-month-label {
+    font-size: 7.5px;
+    font-weight: 300;
+    color: var(--dim);
+    letter-spacing: 0.5px;
+    margin-top: 8px;
+    text-align: center;
+  }
+  .y-tick {
+    position: absolute;
+    right: calc(100% + 8px);
+    font-size: 7.5px;
+    font-weight: 300;
+    color: var(--dim);
+    font-family: var(--mono);
+    letter-spacing: 0.5px;
+    transform: translateY(-50%);
+    white-space: nowrap;
+  }
+  .grid-line-h {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: var(--ghost);
+  }
+
+  /* ─── Funnel (Project Type Breakdown) ────── */
+  .funnel-section {
+    padding: 18px;
+    border-bottom: var(--grid);
+  }
+  .funnel-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--ghost);
+  }
+  .funnel-row:last-child { border-bottom: none; }
+  .funnel-type {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    width: 80px;
+    text-transform: uppercase;
+  }
+  .funnel-bar-container {
+    flex: 1;
+    height: 20px;
+    position: relative;
+    border: var(--grid);
+  }
+  .funnel-bar {
+    height: 100%;
+    transition: width 150ms;
+  }
+  .funnel-bar.type-x { background: var(--green); }
+  .funnel-bar.type-y { background: var(--blue); }
+  .funnel-bar.type-z { background: var(--terracotta); }
+  .funnel-bar.type-other { background: var(--sage); }
+  .funnel-stats {
+    font-size: 11px;
+    font-weight: 700;
+    font-family: var(--mono);
+    letter-spacing: 2px;
+    width: 140px;
+    text-align: right;
+  }
+  .funnel-count {
+    font-size: 7.5px;
+    font-weight: 300;
+    color: var(--dim);
+    width: 60px;
+    text-align: right;
+  }
+
+  /* ─── Payment Terms Distribution ─────────── */
+  .terms-section {
+    padding: 18px;
+    border-bottom: var(--grid);
+  }
+  .terms-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--ghost);
+  }
+  .terms-row:last-child { border-bottom: none; }
+  .terms-name {
+    font-size: 9px;
+    font-weight: 300;
+    letter-spacing: 0.3px;
+    flex: 1;
+    color: var(--sub);
+  }
+  .terms-count {
+    font-size: 11px;
+    font-weight: 700;
+    font-family: var(--mono);
+    letter-spacing: 2px;
+    width: 40px;
+    text-align: right;
+  }
+  .terms-bar-container {
+    width: 120px;
+    height: 14px;
+    border: var(--grid);
+  }
+  .terms-bar {
+    height: 100%;
+    background: var(--bronze);
+  }
+
+  /* ─── Data Table ─────────────────────────── */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+  }
+  thead th {
+    text-align: left;
+    padding: 10px 14px;
+    font-weight: 700;
+    font-size: 7.5px;
+    text-transform: uppercase;
+    letter-spacing: 3.5px;
+    line-height: 1.4;
+    color: var(--bg);
+    background: var(--ink);
+    border-right: 1px solid var(--sub);
+    border-bottom: var(--grid);
+  }
+  thead th:last-child { border-right: none; }
+  thead th.right { text-align: right; }
+  tbody tr { border-bottom: var(--grid); }
+  tbody tr:hover { background: var(--orange); color: #fff; }
+  tbody tr:hover td { color: #fff; }
+  tbody tr:hover .dim-cell { color: rgba(255,255,255,0.7); }
+  tbody td {
+    padding: 10px 14px;
+    border-right: var(--grid);
+    font-weight: 700;
+    letter-spacing: 2px;
+    line-height: 1.2;
+  }
+  tbody td:last-child { border-right: none; }
+  tbody td.right {
+    text-align: right;
+    font-family: var(--mono);
+  }
+  tbody td.dim-cell {
+    color: var(--dim);
+    font-weight: 300;
+    letter-spacing: 0.3px;
+  }
+  .type-badge {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    line-height: 20px;
+    text-align: center;
+    font-size: 11px;
+    font-weight: 700;
+    border: var(--grid);
+  }
+
+  /* ─── Loading & Error ────────────────────── */
+  .loading {
+    padding: 40px 18px;
+    text-align: center;
+    font-size: 9px;
+    font-weight: 300;
+    color: var(--dim);
+    letter-spacing: 0.3px;
+  }
+  .error-msg {
+    padding: 14px 18px;
+    font-size: 9px;
+    font-weight: 300;
+    color: var(--terracotta);
+  }
+
+  /* ─── Tooltip ────────────────────────────── */
+  .tooltip {
+    position: fixed;
+    background: var(--bg);
+    border: var(--grid);
+    padding: 10px 14px;
+    font-size: 9px;
+    font-weight: 300;
+    color: var(--ink);
+    z-index: 1000;
+    pointer-events: none;
+    display: none;
+    max-width: 300px;
+    line-height: 1.5;
+  }
+  .tooltip-label {
+    font-size: 7.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 3.5px;
+    color: var(--sub);
+    margin-bottom: 4px;
+  }
+  .tooltip-value {
+    font-size: 11px;
+    font-weight: 700;
+    font-family: var(--mono);
+    letter-spacing: 2px;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <span class="logo">NOWN</span>
+    <span class="app-title">Closed Won Quotes</span>
+  </div>
+  <div class="header-right">
+    <span class="timestamp" id="timestamp"></span>
+    <button class="refresh-btn" onclick="loadData()">Refresh</button>
+  </div>
+</div>
+
+<div class="page-title">CLOSED WON</div>
+<p class="page-subtitle">dynamics 365 — closed won opportunities with linked quotations, decoded payment terms, and project type breakdown</p>
+
+<div class="kpi-strip" id="kpis">
+  <div class="kpi"><div class="kpi-label">Loading</div><div class="kpi-value">—</div></div>
+</div>
+
+<div class="chart-section">
+  <div class="chart-title">MONTHLY WON VALUE</div>
+  <div class="chart-subtitle">total value of deals closed by month</div>
+  <div class="chart-area" id="monthly-chart"></div>
+  <div class="chart-legend">
+    <div class="legend-item"><div class="legend-dot" style="background:var(--green)"></div> Won Value</div>
+  </div>
+</div>
+
+<div class="funnel-section">
+  <div class="chart-title">PROJECT TYPE BREAKDOWN</div>
+  <div class="chart-subtitle">won value by project classification</div>
+  <div id="type-funnel"></div>
+</div>
+
+<div class="terms-section">
+  <div class="chart-title">PAYMENT TERMS DISTRIBUTION</div>
+  <div class="chart-subtitle">frequency of payment term structures across won quotes</div>
+  <div id="terms-dist"></div>
+</div>
+
+<div class="section-header">QUOTE DETAILS</div>
+<table>
+  <thead>
+    <tr>
+      <th>Type</th>
+      <th>Opportunity</th>
+      <th>Job No.</th>
+      <th>Close Date</th>
+      <th>Payment Terms</th>
+      <th class="right">Total Value</th>
+      <th>Lead Wks</th>
+      <th>Milestones</th>
+      <th>ClickUp</th>
+    </tr>
+  </thead>
+  <tbody id="quote-table"></tbody>
+</table>
+
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+const API_BASE = window.location.origin;
+const EUR = (n) => {
+  if (n == null || isNaN(n)) return '—';
+  const abs = Math.abs(n);
+  const formatted = abs.toLocaleString('de-DE', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  return (n < 0 ? '- ' : '') + 'EUR ' + formatted;
+};
+const SHORT = (n) => {
+  if (n >= 1000000) return 'EUR ' + (n/1000000).toFixed(1) + 'M';
+  if (n >= 1000) return 'EUR ' + Math.round(n/1000) + 'K';
+  return EUR(n);
+};
+const fmtDate = (d) => {
+  if (!d) return '—';
+  const dt = new Date(d);
+  return dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: '2-digit' });
+};
+
+let tooltipEl;
+
+async function loadData() {
+  tooltipEl = document.getElementById('tooltip');
+  document.getElementById('timestamp').textContent =
+    'last updated: ' + new Date().toLocaleString('nl-NL').toLowerCase();
+
+  try {
+    const res = await fetch(`${API_BASE}/api/dynamics/closed-won?count=50`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    renderDashboard(data);
+  } catch (e) {
+    document.getElementById('kpis').innerHTML =
+      `<div class="kpi" style="grid-column:span 6"><div class="kpi-label">Error</div><div class="kpi-value" style="font-size:11px">${e.message}</div><div class="kpi-caption">check dynamics connection and try again</div></div>`;
+  }
+}
+
+function renderDashboard(data) {
+  const { summary, quotes } = data;
+
+  // ─── KPIs ──────────────────────────────
+  document.getElementById('kpis').innerHTML = `
+    <div class="kpi">
+      <div class="kpi-label">Total Won</div>
+      <div class="kpi-value">${SHORT(summary.totalValue)}</div>
+      <div class="kpi-caption">${summary.totalOpportunities} opportunities</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Average Deal</div>
+      <div class="kpi-value">${SHORT(summary.averageDealSize)}</div>
+      <div class="kpi-caption">mean deal size</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Type X</div>
+      <div class="kpi-value">${SHORT(summary.byProjectType?.X?.value || 0)}</div>
+      <div class="kpi-caption">${summary.byProjectType?.X?.count || 0} deals</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Type Y</div>
+      <div class="kpi-value">${SHORT(summary.byProjectType?.Y?.value || 0)}</div>
+      <div class="kpi-caption">${summary.byProjectType?.Y?.count || 0} deals</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Type Z</div>
+      <div class="kpi-value">${SHORT(summary.byProjectType?.Z?.value || 0)}</div>
+      <div class="kpi-caption">${summary.byProjectType?.Z?.count || 0} deals</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Other</div>
+      <div class="kpi-value">${SHORT((summary.byProjectType?.Marketing?.value || 0) + (summary.byProjectType?.Mockup?.value || 0) + (summary.byProjectType?.Other?.value || 0) + (summary.byProjectType?.Unknown?.value || 0))}</div>
+      <div class="kpi-caption">${(summary.byProjectType?.Marketing?.count || 0) + (summary.byProjectType?.Mockup?.count || 0) + (summary.byProjectType?.Other?.count || 0) + (summary.byProjectType?.Unknown?.count || 0)} deals</div>
+    </div>
+  `;
+
+  // ─── Monthly Chart ─────────────────────
+  const chartEl = document.getElementById('monthly-chart');
+  chartEl.innerHTML = '';
+  const byMonth = summary.byCloseMonth || {};
+  const monthKeys = Object.keys(byMonth).sort();
+  if (monthKeys.length === 0) {
+    chartEl.innerHTML = '<div class="loading">no monthly data available</div>';
+  } else {
+    const maxVal = Math.max(...monthKeys.map(k => byMonth[k].value));
+    const chartH = 320;
+    const barW = Math.min(48, (chartEl.offsetWidth || 700) / monthKeys.length - 8);
+    const step = (chartEl.offsetWidth || 700) / monthKeys.length;
+
+    // Y-axis ticks
+    for (let i = 0; i <= 4; i++) {
+      const val = (maxVal / 4) * (4 - i);
+      const y = (i / 4) * (chartH - 30);
+      chartEl.innerHTML += `<div class="y-tick" style="top:${y}px">${SHORT(val)}</div>`;
+      chartEl.innerHTML += `<div class="grid-line-h" style="top:${y}px"></div>`;
+    }
+
+    monthKeys.forEach((mk, i) => {
+      const d = byMonth[mk];
+      const h = maxVal > 0 ? ((d.value / maxVal) * (chartH - 60)) : 0;
+      const x = i * step + step / 2 - barW / 2;
+      const [y, mo] = mk.split('-');
+      const label = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(mo)-1] + ' ' + y.slice(2);
+
+      chartEl.innerHTML += `
+        <div class="bar-group" style="left:${x}px;width:${barW}px">
+          <div class="bar-value-label">${SHORT(d.value)}</div>
+          <div class="bar-stack" style="height:${h}px">
+            <div class="bar bar-won" style="width:${barW}px;height:${h}px" title="${EUR(d.value)} — ${d.count} deals"></div>
+          </div>
+          <div class="bar-month-label">${label}</div>
+        </div>
+      `;
+    });
+  }
+
+  // ─── Type Funnel ───────────────────────
+  const funnelEl = document.getElementById('type-funnel');
+  funnelEl.innerHTML = '';
+  const types = ['X', 'Y', 'Z', 'Marketing', 'Mockup', 'Other', 'Unknown'];
+  const maxTypeVal = Math.max(...types.map(t => summary.byProjectType?.[t]?.value || 0));
+
+  for (const t of types) {
+    const td = summary.byProjectType?.[t];
+    if (!td || td.count === 0) continue;
+    const pct = maxTypeVal > 0 ? (td.value / maxTypeVal) * 100 : 0;
+    const cls = t === 'X' ? 'type-x' : t === 'Y' ? 'type-y' : t === 'Z' ? 'type-z' : 'type-other';
+    funnelEl.innerHTML += `
+      <div class="funnel-row">
+        <div class="funnel-type">Type ${t}</div>
+        <div class="funnel-bar-container"><div class="funnel-bar ${cls}" style="width:${pct}%"></div></div>
+        <div class="funnel-stats">${EUR(td.value)}</div>
+        <div class="funnel-count">${td.count} deals</div>
+      </div>
+    `;
+  }
+
+  // ─── Payment Terms ─────────────────────
+  const termsEl = document.getElementById('terms-dist');
+  termsEl.innerHTML = '';
+  const terms = summary.paymentTermsDistribution || {};
+  const termsSorted = Object.entries(terms).sort((a, b) => b[1] - a[1]);
+  const maxTerms = termsSorted.length > 0 ? termsSorted[0][1] : 1;
+
+  for (const [name, count] of termsSorted) {
+    const pct = (count / maxTerms) * 100;
+    termsEl.innerHTML += `
+      <div class="terms-row">
+        <div class="terms-name">${name}</div>
+        <div class="terms-bar-container"><div class="terms-bar" style="width:${pct}%"></div></div>
+        <div class="terms-count">${count}</div>
+      </div>
+    `;
+  }
+
+  // ─── Quote Table ───────────────────────
+  const tbody = document.getElementById('quote-table');
+  tbody.innerHTML = '';
+
+  for (const q of quotes) {
+    const msText = q.milestones.map(m =>
+      `${m.label}: ${Math.round(m.percentage * 100)}% (${m.trigger}) → ${fmtDate(m.estimatedDate)}`
+    ).join('<br>');
+
+    const clickupStatus = q.clickup
+      ? q.clickup.matched
+        ? `<span style="color:var(--green)">● matched</span>`
+        : `<span style="color:var(--dim)">○ not found</span>`
+      : '<span style="color:var(--ghost)">—</span>';
+
+    tbody.innerHTML += `
+      <tr>
+        <td><span class="type-badge">${q.projectType || '?'}</span></td>
+        <td>${q.opportunityName || '—'}</td>
+        <td class="dim-cell">${q.jobNo || '—'}</td>
+        <td class="dim-cell">${fmtDate(q.actualCloseDate)}</td>
+        <td class="dim-cell" style="font-size:9px;max-width:160px;white-space:normal">${q.paymentTermsText || q.manualPaymentTerms || '—'}</td>
+        <td class="right">${EUR(q.totalPrice)}</td>
+        <td class="dim-cell" style="text-align:center">${q.totalLeadWeeks ?? '—'}</td>
+        <td class="dim-cell" style="font-size:8px;line-height:1.4;max-width:220px;white-space:normal">${msText || '—'}</td>
+        <td>${clickupStatus}</td>
+      </tr>
+    `;
+  }
+}
+
+// Auto-load on page ready
+loadData();
+</script>
+</body>
+</html>

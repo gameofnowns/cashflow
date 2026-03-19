@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NOWN — Pipeline Forecasted AR</title>
+<style>
+  :root {
+    --bg:         #EAE6DF;
+    --ink:        #1A1814;
+    --sub:        #6B6560;
+    --dim:        #A09890;
+    --ghost:      #C8C2B8;
+    --orange:     #FE6337;
+    --blue:       #0086D5;
+    --green:      #82D780;
+    --yellow:     #FAE791;
+    --terracotta: #BD6A55;
+    --sage:       #8F9A8F;
+    --blue-grey:  #D8E1EB;
+    --bronze:     #887550;
+    --blush:      #F7E5DF;
+    --grid:       1px solid #1A1814;
+    --font:       'Replica', 'Helvetica Neue', Arial, sans-serif;
+    --mono:       'SF Mono', 'Fira Code', Consolas, monospace;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--ink);
+    line-height: 1.0;
+  }
+
+  /* ─── Header ─────────────────────────────── */
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 18px;
+    border-bottom: var(--grid);
+  }
+  .header-left { display: flex; align-items: center; gap: 14px; }
+  .logo {
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 3px;
+  }
+  .app-title {
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 3px;
+  }
+  .header-right { display: flex; align-items: center; gap: 14px; }
+  .timestamp {
+    font-size: 7px;
+    font-weight: 300;
+    letter-spacing: 1.5px;
+    color: var(--dim);
+  }
+  .refresh-btn {
+    font-family: var(--font);
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    padding: 8px 16px;
+    background: var(--ink);
+    color: var(--bg);
+    border: none;
+    cursor: pointer;
+    transition: background 150ms;
+  }
+  .refresh-btn:hover { background: var(--orange); color: #fff; }
+
+  /* ─── Filters ────────────────────────────── */
+  .filter-bar {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 10px 18px;
+    border-bottom: var(--grid);
+  }
+  .filter-label {
+    font-size: 7.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 3.5px;
+    color: var(--sub);
+  }
+  .filter-input {
+    font-family: var(--font);
+    font-size: 9px;
+    font-weight: 300;
+    padding: 6px 10px;
+    border: var(--grid);
+    background: var(--bg);
+    color: var(--ink);
+    width: 80px;
+  }
+  .filter-input:focus { outline: 2px solid var(--orange); }
+  .filter-btn {
+    font-family: var(--font);
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    padding: 6px 14px;
+    background: var(--ink);
+    color: var(--bg);
+    border: none;
+    cursor: pointer;
+    transition: background 150ms;
+  }
+  .filter-btn:hover { background: var(--orange); color: #fff; }
+
+  /* ─── Page Title ─────────────────────────── */
+  .page-title {
+    padding: 24px 18px 8px;
+    font-size: 28px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 6px;
+    line-height: 0.70;
+  }
+  .page-subtitle {
+    padding: 8px 18px 20px;
+    font-size: 9px;
+    font-weight: 300;
+    letter-spacing: 0.3px;
+    line-height: 1.7;
+    color: var(--sub);
+  }
+
+  /* ─── KPI Strip ──────────────────────────── */
+  .kpi-strip {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    border-bottom: var(--grid);
+  }
+  .kpi {
+    padding: 14px 18px;
+    border-right: var(--grid);
+  }
+  .kpi:last-child { border-right: none; }
+  .kpi-label {
+    font-size: 7.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 3.5px;
+    line-height: 1.4;
+    color: var(--sub);
+    margin-bottom: 6px;
+  }
+  .kpi-value {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    line-height: 0.75;
+    color: var(--ink);
+    font-family: var(--mono);
+  }
+  .kpi-caption {
+    font-size: 7px;
+    font-weight: 300;
+    letter-spacing: 1.5px;
+    line-height: 1.6;
+    color: var(--dim);
+    margin-top: 6px;
+  }
+
+  /* ─── Section Header ─────────────────────── */
+  .section-header {
+    padding: 18px 18px 10px;
+    font-size: 18px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 4px;
+    line-height: 0.75;
+    border-bottom: var(--grid);
+  }
+
+  /* ─── Chart ──────────────────────────────── */
+  .chart-section {
+    padding: 18px;
+    border-bottom: var(--grid);
+  }
+  .chart-title {
+    font-size: 18px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 4px;
+    margin-bottom: 4px;
+  }
+  .chart-subtitle {
+    font-size: 9px;
+    font-weight: 300;
+    color: var(--sub);
+    letter-spacing: 0.3px;
+    margin-bottom: 18px;
+  }
+  .chart-area {
+    position: relative;
+    height: 320px;
+    border-left: var(--grid);
+    border-bottom: var(--grid);
+    margin-left: 60px;
+  }
+  .chart-legend {
+    display: flex;
+    gap: 18px;
+    margin-top: 14px;
+    padding-top: 10px;
+    border-top: var(--grid);
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 7.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 3.5px;
+    color: var(--sub);
+  }
+  .legend-dot { width: 8px; height: 8px; }
+
+  /* ─── SVG Chart ──────────────────────────── */
+  .forecast-svg {
+    width: 100%;
+    height: 320px;
+    border-left: var(--grid);
+    border-bottom: var(--grid);
+    overflow: visible;
+  }
+
+  /* ─── Bar Chart ──────────────────────────── */
+  .bar-chart {
+    position: relative;
+    height: 320px;
+    border-left: var(--grid);
+    border-bottom: var(--grid);
+    margin-left: 60px;
+  }
+  .bar-group {
+    position: absolute;
+    bottom: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .bar-stack {
+    display: flex;
+    flex-direction: column-reverse;
+    align-items: center;
+  }
+  .bar {
+    min-height: 2px;
+    transition: opacity 150ms;
+    cursor: pointer;
+  }
+  .bar:hover { opacity: 0.7; }
+  .bar-raw { background: var(--blue-grey); border: 1px solid var(--blue); }
+  .bar-weighted { background: var(--blue); }
+  .bar-value-label {
+    font-size: 7.5px;
+    font-weight: 300;
+    color: var(--dim);
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+    font-family: var(--mono);
+  }
+  .bar-month-label {
+    font-size: 7.5px;
+    font-weight: 300;
+    color: var(--dim);
+    letter-spacing: 0.5px;
+    margin-top: 8px;
+    text-align: center;
+  }
+  .y-tick {
+    position: absolute;
+    right: calc(100% + 8px);
+    font-size: 7.5px;
+    font-weight: 300;
+    color: var(--dim);
+    font-family: var(--mono);
+    letter-spacing: 0.5px;
+    transform: translateY(-50%);
+    white-space: nowrap;
+  }
+  .grid-line-h {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: var(--ghost);
+  }
+
+  /* ─── Stage Breakdown ────────────────────── */
+  .stage-section {
+    padding: 18px;
+    border-bottom: var(--grid);
+  }
+  .stage-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--ghost);
+  }
+  .stage-row:last-child { border-bottom: none; }
+  .stage-name {
+    font-size: 9px;
+    font-weight: 300;
+    letter-spacing: 0.3px;
+    width: 160px;
+    color: var(--sub);
+  }
+  .stage-bar-container {
+    flex: 1;
+    height: 20px;
+    border: var(--grid);
+  }
+  .stage-bar {
+    height: 100%;
+    background: var(--blue);
+  }
+  .stage-stats {
+    font-size: 11px;
+    font-weight: 700;
+    font-family: var(--mono);
+    letter-spacing: 2px;
+    width: 140px;
+    text-align: right;
+  }
+  .stage-count {
+    font-size: 7.5px;
+    font-weight: 300;
+    color: var(--dim);
+    width: 60px;
+    text-align: right;
+  }
+
+  /* ─── Timeline ───────────────────────────── */
+  .timeline-section {
+    padding: 18px;
+    border-bottom: var(--grid);
+  }
+  .tl-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--ghost);
+  }
+  .tl-row:last-child { border-bottom: none; }
+  .tl-name {
+    width: 240px;
+    font-size: 7.5px;
+    font-weight: 400;
+    text-transform: uppercase;
+    letter-spacing: 2.5px;
+    line-height: 1.3;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .tl-prob {
+    width: 40px;
+    font-size: 9px;
+    font-weight: 300;
+    color: var(--dim);
+    text-align: right;
+  }
+  .tl-bar-container {
+    flex: 1;
+    position: relative;
+    height: 20px;
+  }
+  .tl-bar {
+    position: absolute;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    padding: 0 6px;
+    font-size: 7.5px;
+    font-weight: 700;
+    font-family: var(--mono);
+    letter-spacing: 1px;
+    color: #fff;
+    white-space: nowrap;
+    overflow: hidden;
+    border: var(--grid);
+  }
+  .tl-bar.high { background: var(--blue); }
+  .tl-bar.medium { background: var(--blue-grey); color: var(--ink); }
+  .tl-bar.low { background: var(--ghost); color: var(--ink); }
+  .tl-month-markers {
+    position: relative;
+    height: 20px;
+    margin-left: 294px;
+  }
+  .tl-month-marker {
+    position: absolute;
+    font-size: 7.5px;
+    font-weight: 300;
+    color: var(--dim);
+    letter-spacing: 0.5px;
+    top: 4px;
+    transform: translateX(-50%);
+  }
+
+  /* ─── Monthly Detail Table ───────────────── */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+  }
+  thead th {
+    text-align: left;
+    padding: 10px 14px;
+    font-weight: 700;
+    font-size: 7.5px;
+    text-transform: uppercase;
+    letter-spacing: 3.5px;
+    line-height: 1.4;
+    color: var(--bg);
+    background: var(--ink);
+    border-right: 1px solid var(--sub);
+    border-bottom: var(--grid);
+  }
+  thead th:last-child { border-right: none; }
+  thead th.right { text-align: right; }
+  tbody tr { border-bottom: var(--grid); }
+  tbody tr:hover { background: var(--orange); color: #fff; }
+  tbody tr:hover td { color: #fff; }
+  tbody tr:hover .dim-cell { color: rgba(255,255,255,0.7); }
+  tbody td {
+    padding: 10px 14px;
+    border-right: var(--grid);
+    font-weight: 700;
+    letter-spacing: 2px;
+    line-height: 1.2;
+  }
+  tbody td:last-child { border-right: none; }
+  tbody td.right {
+    text-align: right;
+    font-family: var(--mono);
+  }
+  tbody td.dim-cell {
+    color: var(--dim);
+    font-weight: 300;
+    letter-spacing: 0.3px;
+  }
+  tbody td.forecast-val {
+    color: var(--terracotta);
+    font-style: italic;
+    font-family: var(--mono);
+    text-align: right;
+  }
+
+  /* ─── Opportunity Table ──────────────────── */
+  .type-badge {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    line-height: 20px;
+    text-align: center;
+    font-size: 11px;
+    font-weight: 700;
+    border: var(--grid);
+  }
+  .prob-bar {
+    display: inline-block;
+    height: 10px;
+    border: var(--grid);
+    vertical-align: middle;
+  }
+
+  .loading {
+    padding: 40px 18px;
+    text-align: center;
+    font-size: 9px;
+    font-weight: 300;
+    color: var(--dim);
+    letter-spacing: 0.3px;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <span class="logo">NOWN</span>
+    <span class="app-title">Pipeline Forecast</span>
+  </div>
+  <div class="header-right">
+    <span class="timestamp" id="timestamp"></span>
+    <button class="refresh-btn" onclick="applyFilters()">Refresh</button>
+  </div>
+</div>
+
+<div class="page-title">FORECASTED AR</div>
+<p class="page-subtitle">pipeline opportunities — rolling 12-month forecasted accounts receivable based on most recent open quotations</p>
+
+<div class="filter-bar">
+  <span class="filter-label">Pipeline Stage</span>
+  <input type="text" class="filter-input" id="f-stage" placeholder="e.g. 3" value="">
+  <button class="filter-btn" onclick="applyFilters()">Apply</button>
+  <span style="font-size:7.5px;font-weight:300;color:var(--dim);letter-spacing:0.3px;margin-left:10px">showing opportunities with est. close date within next 12 months</span>
+</div>
+
+<div class="kpi-strip" id="kpis">
+  <div class="kpi" style="grid-column:span 6"><div class="kpi-label">Loading</div><div class="kpi-value">—</div></div>
+</div>
+
+<div class="chart-section">
+  <div class="chart-title">12-MONTH FORECASTED AR</div>
+  <div class="chart-subtitle">monthly forecasted inflow from pipeline opportunities — based on payment terms from most recent open quotations</div>
+  <div class="bar-chart" id="forecast-chart"></div>
+  <div class="chart-legend">
+    <div class="legend-item"><div class="legend-dot" style="background:var(--blue)"></div> Forecasted AR</div>
+  </div>
+</div>
+
+<div class="stage-section">
+  <div class="chart-title">PIPELINE STAGE BREAKDOWN</div>
+  <div class="chart-subtitle">total value by opportunity stage</div>
+  <div id="stage-breakdown"></div>
+</div>
+
+<div class="timeline-section">
+  <div class="chart-title">OPPORTUNITY TIMELINE</div>
+  <div class="chart-subtitle">when forecasted payments land — sized by value, colored by probability</div>
+  <div id="timeline"></div>
+</div>
+
+<div class="section-header">MONTHLY DETAIL</div>
+<table id="monthly-table">
+  <thead>
+    <tr>
+      <th>Month</th>
+      <th class="right">Forecasted AR</th>
+      <th class="right">Cumulative</th>
+      <th class="right">Milestones</th>
+    </tr>
+  </thead>
+  <tbody id="monthly-tbody"></tbody>
+</table>
+
+<div class="section-header" style="margin-top:0">OPPORTUNITIES</div>
+<table>
+  <thead>
+    <tr>
+      <th>Type</th>
+      <th>Opportunity</th>
+      <th>Job No.</th>
+      <th>Stage</th>
+      <th>Est. Close</th>
+      <th class="right">Value</th>
+      <th>Payment Terms</th>
+      <th>Lead Wks</th>
+      <th>Milestones</th>
+      <th>Quote?</th>
+    </tr>
+  </thead>
+  <tbody id="opp-table"></tbody>
+</table>
+
+<script>
+const API_BASE = window.location.origin;
+const EUR = (n) => {
+  if (n == null || isNaN(n)) return '—';
+  const abs = Math.abs(n);
+  const formatted = abs.toLocaleString('de-DE', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  return (n < 0 ? '- ' : '') + 'EUR ' + formatted;
+};
+const SHORT = (n) => {
+  if (n >= 1000000) return 'EUR ' + (n/1000000).toFixed(1) + 'M';
+  if (n >= 1000) return 'EUR ' + Math.round(n/1000) + 'K';
+  return EUR(n);
+};
+const fmtDate = (d) => {
+  if (!d) return '—';
+  const dt = new Date(d);
+  return dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: '2-digit' });
+};
+const monthLabel = (mk) => {
+  const [y, mo] = mk.split('-');
+  return ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(mo)-1] + ' ' + y.slice(2);
+};
+
+async function applyFilters() {
+  const stage = document.getElementById('f-stage').value.trim();
+
+  document.getElementById('timestamp').textContent =
+    'last updated: ' + new Date().toLocaleString('nl-NL').toLowerCase();
+
+  const params = new URLSearchParams({ count: '100' });
+  if (stage) params.set('stage', stage);
+
+  try {
+    const res = await fetch(`${API_BASE}/api/dynamics/pipeline-forecast?${params}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    renderDashboard(data);
+  } catch (e) {
+    document.getElementById('kpis').innerHTML =
+      `<div class="kpi" style="grid-column:span 6"><div class="kpi-label">Error</div><div class="kpi-value" style="font-size:11px">${e.message}</div><div class="kpi-caption">check dynamics connection and try again</div></div>`;
+  }
+}
+
+function renderDashboard(data) {
+  const { summary, monthlyForecast, opportunities } = data;
+
+  // ─── KPIs ──────────────────────────────
+  const qtr1Months = Object.keys(monthlyForecast).slice(0, 3);
+  const qtr1Total = qtr1Months.reduce((s, mk) => s + (monthlyForecast[mk]?.totalAr || 0), 0);
+  const qtr2Months = Object.keys(monthlyForecast).slice(3, 6);
+  const qtr2Total = qtr2Months.reduce((s, mk) => s + (monthlyForecast[mk]?.totalAr || 0), 0);
+
+  document.getElementById('kpis').innerHTML = `
+    <div class="kpi">
+      <div class="kpi-label">Pipeline Value</div>
+      <div class="kpi-value">${SHORT(summary.totalPipelineValue)}</div>
+      <div class="kpi-caption">${summary.totalOpportunities} opportunities</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">12M Forecasted AR</div>
+      <div class="kpi-value">${SHORT(summary.totalForecastedAr)}</div>
+      <div class="kpi-caption">total forecasted inflow</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Next 3 Months</div>
+      <div class="kpi-value">${SHORT(qtr1Total)}</div>
+      <div class="kpi-caption">forecasted AR</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Months 4–6</div>
+      <div class="kpi-value">${SHORT(qtr2Total)}</div>
+      <div class="kpi-caption">forecasted AR</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">With Quotes</div>
+      <div class="kpi-value">${summary.withQuotes}</div>
+      <div class="kpi-caption">of ${summary.totalOpportunities} have open quotes</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Without Quotes</div>
+      <div class="kpi-value">${summary.withoutQuotes}</div>
+      <div class="kpi-caption">using estimated values</div>
+    </div>
+  `;
+
+  // ─── Bar Chart ─────────────────────────
+  const chartEl = document.getElementById('forecast-chart');
+  chartEl.innerHTML = '';
+  const monthKeys = Object.keys(monthlyForecast);
+  if (monthKeys.length === 0) {
+    chartEl.innerHTML = '<div class="loading">no forecast data</div>';
+    return;
+  }
+
+  const maxVal = Math.max(...monthKeys.map(mk => monthlyForecast[mk].totalAr));
+  const chartH = 320;
+  const barW = Math.min(48, (chartEl.offsetWidth || 700) / monthKeys.length - 12);
+  const step = (chartEl.offsetWidth || 700) / monthKeys.length;
+
+  // Y-axis
+  for (let i = 0; i <= 4; i++) {
+    const val = (maxVal / 4) * (4 - i);
+    const y = (i / 4) * (chartH - 40);
+    chartEl.innerHTML += `<div class="y-tick" style="top:${y}px">${SHORT(val)}</div>`;
+    chartEl.innerHTML += `<div class="grid-line-h" style="top:${y}px"></div>`;
+  }
+
+  monthKeys.forEach((mk, i) => {
+    const d = monthlyForecast[mk];
+    const h = maxVal > 0 ? ((d.totalAr / maxVal) * (chartH - 60)) : 0;
+    const x = i * step + step / 2 - barW / 2;
+
+    chartEl.innerHTML += `
+      <div class="bar-group" style="left:${x}px;width:${barW}px">
+        <div class="bar-value-label">${d.totalAr > 0 ? SHORT(d.totalAr) : ''}</div>
+        <div class="bar-stack" style="height:${h}px">
+          <div class="bar bar-weighted" style="width:${barW}px;height:${h}px" title="${EUR(d.totalAr)} — ${d.milestoneCount} milestones"></div>
+        </div>
+        <div class="bar-month-label">${monthLabel(mk)}</div>
+      </div>
+    `;
+  });
+
+  // ─── Stage Breakdown ───────────────────
+  const stageEl = document.getElementById('stage-breakdown');
+  stageEl.innerHTML = '';
+  const stages = summary.byPipelineStage || {};
+  const stageEntries = Object.entries(stages).sort((a, b) => b[1].value - a[1].value);
+  const maxStageVal = stageEntries.length > 0 ? stageEntries[0][1].value : 1;
+
+  for (const [name, info] of stageEntries) {
+    const pct = (info.value / maxStageVal) * 100;
+    stageEl.innerHTML += `
+      <div class="stage-row">
+        <div class="stage-name">${name}</div>
+        <div class="stage-bar-container"><div class="stage-bar" style="width:${pct}%"></div></div>
+        <div class="stage-stats">${EUR(info.value)}</div>
+        <div class="stage-count">${info.count} opps</div>
+      </div>
+    `;
+  }
+
+  // ─── Timeline ──────────────────────────
+  const tlEl = document.getElementById('timeline');
+  tlEl.innerHTML = '';
+
+  const now = new Date();
+  const tlStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const tlEnd = new Date(now.getFullYear(), now.getMonth() + 12, 1);
+  const tlRange = tlEnd.getTime() - tlStart.getTime();
+
+  // Month markers
+  let markerHtml = '<div class="tl-month-markers">';
+  for (let i = 0; i < 12; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+    const pct = ((d.getTime() - tlStart.getTime()) / tlRange) * 100;
+    markerHtml += `<span class="tl-month-marker" style="left:${pct}%">${monthLabel(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`)}</span>`;
+  }
+  markerHtml += '</div>';
+  tlEl.innerHTML = markerHtml;
+
+  // Sort by value desc, show top 25
+  const top = [...opportunities].sort((a, b) => b.totalPrice - a.totalPrice).slice(0, 25);
+
+  for (const opp of top) {
+    let rowHtml = `<div class="tl-row">`;
+    rowHtml += `<div class="tl-name"><span class="type-badge">${opp.projectType || '?'}</span> ${opp.opportunityName}</div>`;
+    rowHtml += `<div class="tl-bar-container">`;
+
+    for (const ms of opp.milestones) {
+      const d = new Date(ms.estimatedDate);
+      const pos = Math.max(0, Math.min(100, ((d.getTime() - tlStart.getTime()) / tlRange) * 100));
+      const w = Math.max(2, (ms.amount / (maxVal || 100000)) * 20);
+      rowHtml += `<div class="tl-bar high" style="left:${pos}%;width:${w}%" title="${EUR(ms.amount)} — ${fmtDate(ms.estimatedDate)} (${ms.trigger})">${SHORT(ms.amount)}</div>`;
+    }
+
+    rowHtml += `</div></div>`;
+    tlEl.innerHTML += rowHtml;
+  }
+
+  // ─── Monthly Detail Table ──────────────
+  const mtbody = document.getElementById('monthly-tbody');
+  mtbody.innerHTML = '';
+  let cumulative = 0;
+
+  for (const mk of monthKeys) {
+    const d = monthlyForecast[mk];
+    cumulative += d.totalAr;
+
+    mtbody.innerHTML += `
+      <tr>
+        <td>${monthLabel(mk)}</td>
+        <td class="forecast-val">${EUR(d.totalAr)}</td>
+        <td class="right" style="font-family:var(--mono)">${EUR(cumulative)}</td>
+        <td class="dim-cell" style="text-align:right">${d.milestoneCount}</td>
+      </tr>
+    `;
+  }
+  // Totals row
+  mtbody.innerHTML += `
+    <tr style="border-top:2px solid var(--ink)">
+      <td style="font-weight:700">TOTAL</td>
+      <td class="forecast-val" style="font-weight:700">${EUR(cumulative)}</td>
+      <td></td>
+      <td class="dim-cell" style="text-align:right">${Object.values(monthlyForecast).reduce((s,m) => s + m.milestoneCount, 0)}</td>
+    </tr>
+  `;
+
+  // ─── Opportunity Table ─────────────────
+  const tbody = document.getElementById('opp-table');
+  tbody.innerHTML = '';
+
+  const sorted = [...opportunities].sort((a, b) => b.totalPrice - a.totalPrice);
+
+  for (const opp of sorted) {
+    const msText = opp.milestones.map(m =>
+      `${m.label}: ${Math.round(m.percentage * 100)}% (${m.trigger}) → ${fmtDate(m.estimatedDate)}`
+    ).join('<br>');
+
+    tbody.innerHTML += `
+      <tr>
+        <td><span class="type-badge">${opp.projectType || '?'}</span></td>
+        <td>${opp.opportunityName || '—'}</td>
+        <td class="dim-cell">${opp.jobNo || '—'}</td>
+        <td class="dim-cell">${opp.pipelineStage || '—'}</td>
+        <td class="dim-cell">${fmtDate(opp.estimatedCloseDate)}</td>
+        <td class="right">${EUR(opp.totalPrice)}</td>
+        <td class="dim-cell" style="font-size:9px;max-width:150px;white-space:normal">${opp.paymentTermsText || opp.manualPaymentTerms || '—'}</td>
+        <td class="dim-cell" style="text-align:center">${opp.totalLeadWeeks ?? '—'}</td>
+        <td class="dim-cell" style="font-size:8px;line-height:1.4;max-width:200px;white-space:normal">${msText || '—'}</td>
+        <td>${opp.hasOpenQuote ? '<span style="color:var(--green)">● yes</span>' : '<span style="color:var(--dim)">○ no</span>'}</td>
+      </tr>
+    `;
+  }
+}
+
+// Auto-load
+applyFilters();
+</script>
+</body>
+</html>
