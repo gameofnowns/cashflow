@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NOWN — Cashflows</title>
+<style>
+  :root {
+    --bg:#EAE6DF;--ink:#1A1814;--sub:#6B6560;--dim:#A09890;--ghost:#C8C2B8;
+    --orange:#FE6337;--blue:#0086D5;--green:#82D780;--yellow:#FAE791;
+    --terracotta:#BD6A55;--sage:#8F9A8F;--blue-grey:#D8E1EB;--bronze:#887550;
+    --blush:#F7E5DF;--red:#C0392B;
+    --grid:1px solid #1A1814;
+    --font:'Replica','Helvetica Neue',Arial,sans-serif;
+    --mono:'SF Mono','Fira Code',Consolas,monospace;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:var(--font);background:var(--bg);color:var(--ink);line-height:1.0;}
+
+  .header{display:flex;align-items:center;padding:0;border-bottom:var(--grid);}
+  .header-logo{padding:8px 18px;border-right:var(--grid);display:flex;align-items:center;}
+  .header-logo svg{height:24px;width:auto;}
+  .header-right{display:flex;align-items:center;gap:14px;margin-left:auto;padding:8px 18px;}
+  .timestamp{font-size:7px;font-weight:300;letter-spacing:1.5px;color:var(--dim);}
+  .btn{font-family:var(--font);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:2px;padding:8px 16px;background:var(--ink);color:var(--bg);border:none;cursor:pointer;transition:background 150ms;}
+  .btn:hover{background:var(--orange);color:#fff;}
+
+  /* Hero bar: CASHFLOWS | sync buttons (no desc text) */
+  .hero-bar{display:flex;align-items:center;border-bottom:var(--grid);}
+  .hero-title{padding:12px 18px;font-size:28px;font-weight:700;text-transform:uppercase;letter-spacing:6px;line-height:0.70;border-right:var(--grid);}
+  .hero-sync{display:flex;align-items:center;gap:0;flex:1;}
+  .status-item{display:flex;align-items:center;gap:6px;padding:8px 14px;border-right:1px solid var(--ghost);}
+  .status-item:last-child{border-right:none;}
+  .status-dot{width:6px;height:6px;display:inline-block;}
+  .status-dot.ok{background:var(--green);} .status-dot.warn{background:var(--yellow);} .status-dot.off{background:var(--terracotta);}
+  .status-name{font-size:7.5px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:var(--sub);}
+  .status-detail{font-size:6.5px;font-weight:300;color:var(--dim);}
+  .sync-btn{font-family:var(--font);font-size:6.5px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;padding:2px 6px;background:var(--ink);color:var(--bg);border:none;cursor:pointer;transition:background 150ms;}
+  .sync-btn:hover{background:var(--orange);color:#fff;}
+
+  .kpi-strip{display:grid;grid-template-columns:repeat(6,1fr);border-bottom:var(--grid);}
+  .kpi{padding:14px 18px;border-right:var(--grid);}
+  .kpi:last-child{border-right:none;}
+  .kpi-label{font-size:7.5px;font-weight:700;text-transform:uppercase;letter-spacing:3.5px;line-height:1.4;color:var(--sub);margin-bottom:6px;}
+  .kpi-value{font-size:22px;font-weight:700;letter-spacing:2px;line-height:0.75;color:var(--ink);font-family:var(--mono);}
+  .kpi-caption{font-size:7px;font-weight:300;letter-spacing:1.5px;line-height:1.6;color:var(--dim);margin-top:6px;}
+
+  .controls-row{padding:10px 18px;border-bottom:var(--grid);display:flex;flex-wrap:wrap;gap:8px;align-items:center;}
+  .ctrl-label{font-size:7.5px;font-weight:700;text-transform:uppercase;letter-spacing:3.5px;color:var(--sub);margin-right:4px;}
+  .ctrl-btn{font-family:var(--font);font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;padding:5px 10px;border:var(--grid);background:transparent;color:var(--ink);cursor:pointer;transition:all 150ms;}
+  .ctrl-btn.active{background:var(--ink);color:var(--bg);}
+  .ctrl-btn:hover{background:var(--orange);color:#fff;}
+  .ctrl-btn .dot{display:inline-block;width:6px;height:6px;margin-right:4px;vertical-align:middle;}
+  .ctrl-sep{width:1px;height:24px;background:var(--ghost);margin:0 6px;}
+  .bank-input{font-family:var(--mono);font-size:11px;font-weight:700;padding:4px 8px;border:var(--grid);background:var(--bg);color:var(--ink);width:110px;letter-spacing:1px;}
+  .bank-input:focus{outline:2px solid var(--orange);}
+
+  /* Chart — no bottom border, flows directly into table */
+  .chart-section{padding:0;position:relative;overflow:hidden;}
+  .chart-canvas{position:relative;height:400px;margin-left:120px;border-left:var(--grid);border-bottom:var(--grid);}
+
+  /* Legend — positioned top-right of chart */
+  .chart-legend{position:absolute;top:18px;right:18px;display:flex;flex-direction:column;gap:4px;padding:8px 12px;border:var(--grid);background:var(--bg);}
+  .legend-item{display:flex;align-items:center;gap:6px;font-size:7px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--sub);}
+  .legend-dot{width:8px;height:8px;border:1px solid var(--ink);}
+
+  .y-tick{position:absolute;right:calc(100% + 8px);font-size:7.5px;font-weight:300;color:var(--dim);font-family:var(--mono);letter-spacing:0.5px;transform:translateY(-50%);white-space:nowrap;}
+  .grid-h{position:absolute;left:0;right:0;height:1px;background:var(--ghost);}
+  .zero-line{position:absolute;left:0;right:0;height:1px;background:var(--dim);opacity:0.6;}
+  .bar-seg{min-height:1px;transition:opacity 150ms;cursor:pointer;position:absolute;}
+  .bar-seg:hover{opacity:0.7;}
+  .line-overlay{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;}
+
+  /* P&L Table — directly under chart, no section header */
+  .pnl-wrap{overflow-x:auto;border-bottom:var(--grid);}
+  .pnl-table{width:100%;border-collapse:collapse;font-size:10px;table-layout:fixed;min-width:900px;}
+  .pnl-table th{padding:8px 8px;font-weight:700;font-size:7px;text-transform:uppercase;letter-spacing:2px;line-height:1.4;border-right:var(--grid);border-bottom:var(--grid);text-align:right;white-space:nowrap;}
+  .pnl-table th:first-child{text-align:left;width:120px;min-width:120px;max-width:120px;position:sticky;left:0;background:var(--bg);z-index:2;}
+  .pnl-table th.month-hdr{color:var(--bg);background:var(--ink);cursor:pointer;transition:background 150ms;}
+  .pnl-table th.month-hdr:hover{background:var(--orange);}
+  .pnl-table th.month-hdr.expanded{background:var(--orange);}
+  .pnl-table th.total-hdr{color:var(--bg);background:var(--ink);}
+  .pnl-table th.row-hdr{background:var(--bg);color:var(--sub);text-align:left;letter-spacing:3px;}
+  .pnl-table td{padding:6px 8px;border-right:var(--grid);border-bottom:1px solid var(--ghost);font-weight:700;letter-spacing:1px;font-family:var(--mono);text-align:right;font-size:9px;white-space:nowrap;}
+  .pnl-table td:first-child{text-align:left;font-family:var(--font);letter-spacing:2px;position:sticky;left:0;background:var(--bg);z-index:1;font-size:10px;}
+  .pnl-table tr:hover td{background:rgba(254,99,55,0.06);}
+  .pnl-table tr:hover td:first-child{background:rgba(254,99,55,0.06);}
+  .pnl-table .row-sep td{border-bottom:var(--grid);}
+  .pnl-table .row-total td{border-top:2px solid var(--ink);font-size:10px;}
+  .pnl-table .ghost{color:var(--ghost);}
+  .pnl-table .forecast{color:var(--terracotta);}
+  /* Cash position row: first cell black bg, white text */
+  .pnl-table .row-cash td:first-child{background:var(--ink);color:var(--bg);}
+  .pnl-table .row-cash td{font-weight:700;font-size:10px;}
+  /* Negative cash cells: black bg, orange text, bold */
+  .pnl-table .cell-neg{background:var(--ink);color:var(--orange);font-weight:700;}
+  /* Orange highlight months: black text */
+  .pnl-table th.month-hdr.expanded{background:var(--orange);color:var(--ink);}
+
+  /* Detail section — styled like CASHFLOWS hero */
+  .detail-section{border-bottom:var(--grid);}
+  .detail-hero{display:flex;align-items:center;justify-content:space-between;padding:12px 18px;background:var(--bg);border-bottom:var(--grid);}
+  .detail-title{font-size:28px;font-weight:700;text-transform:uppercase;letter-spacing:6px;line-height:0.70;}
+  .detail-close{font-family:var(--font);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:2px;padding:8px 16px;background:var(--ink);color:var(--bg);border:none;cursor:pointer;transition:background 150ms;}
+  .detail-close:hover{background:var(--orange);color:#fff;}
+
+  /* Detail tables */
+  .detail-sub{padding:8px 18px;font-size:7.5px;font-weight:700;text-transform:uppercase;letter-spacing:3px;color:var(--sub);border-bottom:1px solid var(--ghost);}
+  .dtbl{width:100%;border-collapse:collapse;font-size:10px;}
+  .dtbl th{padding:8px 12px;font-weight:700;font-size:7px;text-transform:uppercase;letter-spacing:2.5px;color:var(--bg);background:var(--ink);border-right:1px solid var(--sub);border-bottom:var(--grid);text-align:left;}
+  .dtbl th:last-child{border-right:none;}
+  .dtbl th.right{text-align:right;}
+  .dtbl td{padding:6px 12px;border-right:var(--grid);border-bottom:var(--grid);font-weight:700;letter-spacing:1px;color:var(--ink);}
+  .dtbl td:last-child{border-right:none;}
+  .dtbl td.right{text-align:right;font-family:var(--mono);font-weight:700;letter-spacing:1px;}
+  .dtbl tr:hover td{background:var(--orange);color:#fff;}
+
+  /* Payment progress bar */
+  .pay-bar{display:flex;height:12px;border:1px solid var(--ink);width:100%;min-width:80px;}
+  .pay-bar .paid{background:var(--green);height:100%;}
+  .pay-bar .outstanding{background:var(--blue);height:100%;}
+  .pay-bar .overdue{background:var(--terracotta);height:100%;}
+  .pay-info{font-size:7px;font-weight:300;color:var(--dim);margin-top:2px;}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-logo">
+    <svg width="164" height="20" viewBox="0 0 328 41" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path fill-rule="evenodd" clip-rule="evenodd" d="M65.4138 0H76.3161V24.2839C76.3161 31.1677 72.3342 37.047 65.8835 39.6833C59.4327 42.3195 52.4042 40.9378 47.4664 36.0712L39.752 28.4617L10.9023 0H26.3185L55.1682 28.4576L65.4096 38.5599V0H65.4138ZM317.098 0H328V24.2839C328 31.1677 324.018 37.047 317.567 39.6833C311.117 42.3195 304.088 40.9378 299.15 36.0712L291.436 28.4617L262.586 0V40.9993H251.684V0H278.002L306.852 28.4576L317.094 38.5599V0H317.098ZM158.077 0H147.175V24.2839C147.175 31.1677 151.157 37.047 157.607 39.6833C164.058 42.3195 171.087 40.9378 176.025 36.0712L183.739 28.4617L186.345 25.8911C186.914 32.0738 190.763 37.2561 196.703 39.6833C203.154 42.3195 210.182 40.9378 215.12 36.0712L222.834 28.4617L251.684 0H236.268L207.418 28.4576L197.177 38.5599V15.2067L212.589 0H197.172L168.323 28.4576L158.081 38.5599V0H158.077ZM133.55 9.40935H89.9408V31.59H133.55V9.40935ZM98.4574 0H125.029C135.724 0 144.448 8.60576 144.448 19.1549V21.8444C144.448 32.3936 135.724 40.9993 125.029 40.9993H98.4574C87.7629 40.9993 79.0386 32.3936 79.0386 21.8444V19.1549C79.0386 8.60576 87.7629 0 98.4574 0ZM0 0H10.9023V40.9993H0V0Z" fill="#1A1814"/>
+    </svg>
+  </div>
+  <div class="header-right">
+    <span class="timestamp" id="ts"></span>
+    <button class="btn" onclick="loadData()">Refresh</button>
+  </div>
+</div>
+
+<div class="hero-bar">
+  <div class="hero-title">CASHFLOWS</div>
+  <div class="hero-sync" id="status-bar">
+    <div class="status-item"><span class="status-dot off"></span><span class="status-name">Dynamics</span></div>
+    <div class="status-item"><span class="status-dot off"></span><span class="status-name">ClickUp</span></div>
+    <div class="status-item"><span class="status-dot off"></span><span class="status-name">Exact</span></div>
+  </div>
+</div>
+
+<div class="kpi-strip" id="kpis"></div>
+
+<div class="controls-row">
+  <span class="ctrl-label">Balance</span>
+  <input type="text" class="bank-input" id="bank-input" placeholder="EUR" value="">
+  <button class="ctrl-btn" onclick="loadData()" style="font-size:7px;padding:4px 8px">Set</button>
+  <div class="ctrl-sep"></div>
+  <span class="ctrl-label">Presets</span>
+  <button class="ctrl-btn" onclick="applyPreset('conservative')">Conservative</button>
+  <button class="ctrl-btn" onclick="applyPreset('likely')">Likely</button>
+  <button class="ctrl-btn" onclick="applyPreset('full')">Full Forecast</button>
+  <button class="ctrl-btn" onclick="applyPreset('weighted')">Weighted</button>
+</div>
+<div class="controls-row" id="toggles"></div>
+
+<div class="chart-section">
+  <div class="chart-canvas" id="chart"></div>
+  <div class="chart-legend" id="legend"></div>
+</div>
+
+<!-- Table directly below chart — acts as X-axis labels -->
+<div class="pnl-wrap"><table class="pnl-table" id="pnl-table"></table></div>
+
+<div id="detail-panel" style="display:none"></div>
+
+<script>
+const API = window.location.origin;
+const EUR = (n) => {
+  if (n == null || isNaN(n)) return '—';
+  const abs = Math.abs(n);
+  const f = abs.toLocaleString('de-DE',{minimumFractionDigits:0,maximumFractionDigits:0});
+  return (n < 0 ? '- ' : '') + 'EUR ' + f;
+};
+const SHORT = (n) => {
+  const abs = Math.abs(n);
+  const sign = n < 0 ? '-' : '';
+  if (abs >= 1000000) return sign + 'EUR ' + (abs/1000000).toFixed(1) + 'M';
+  if (abs >= 1000) return sign + 'EUR ' + Math.round(abs/1000) + 'K';
+  return EUR(n);
+};
+const shortMonth = (mk) => {
+  const [y,mo] = mk.split('-');
+  return ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(mo)-1] + ' ' + y.slice(2);
+};
+
+let DATA = null;
+let EXPANDED_MONTH = null;
+let TOGGLES = {
+  currentAr:true, billableAr:true, phase3:true,
+  ap:true, cogsWon:true, cogsPipeline:true,
+  vat:true, overhead:true, weighted:false,
+};
+
+const SERIES = [
+  {id:'currentAr',   label:'Current AR',     color:'#82D780', type:'inflow'},
+  {id:'billableAr',  label:'Billable AR',    color:'#0086D5', type:'inflow'},
+  {id:'phase3',      label:'Committed',      color:'#D8E1EB', type:'inflow'},
+  {id:'ap',          label:'AP',             color:'#C0392B', type:'outflow'},
+  {id:'cogsWon',     label:'COGS (Won)',     color:'#887550', type:'outflow'},
+  {id:'cogsPipeline',label:'COGS (Pipeline)',color:'#BD6A55', type:'outflow'},
+  {id:'vat',         label:'VAT Returns',    color:'#8F9A8F', type:'inflow'},
+  {id:'overhead',    label:'Overhead',       color:'#F7E5DF', type:'outflow'},
+];
+
+function applyPreset(name) {
+  const all=(v)=>{for(const k in TOGGLES)TOGGLES[k]=v;};
+  switch(name){
+    case 'conservative': all(true);TOGGLES.phase3=false;TOGGLES.cogsPipeline=false;TOGGLES.weighted=false;break;
+    case 'likely': all(true);TOGGLES.weighted=false;break;
+    case 'full': all(true);TOGGLES.weighted=false;break;
+    case 'weighted': all(true);TOGGLES.weighted=true;break;
+  }
+  render();
+}
+
+function renderToggles() {
+  const el=document.getElementById('toggles');
+  let html='<span class="ctrl-label">Inflows</span>';
+  SERIES.filter(s=>s.type==='inflow'&&s.id!=='vat').forEach(s=>{
+    html+=`<button class="ctrl-btn ${TOGGLES[s.id]?'active':''}" onclick="toggle('${s.id}')"><span class="dot" style="background:${s.color}"></span>${s.label}</button>`;
+  });
+  html+='<div class="ctrl-sep"></div><span class="ctrl-label">Outflows</span>';
+  SERIES.filter(s=>s.type==='outflow').forEach(s=>{
+    html+=`<button class="ctrl-btn ${TOGGLES[s.id]?'active':''}" onclick="toggle('${s.id}')"><span class="dot" style="background:${s.color}"></span>${s.label}</button>`;
+  });
+  const vatS=SERIES.find(s=>s.id==='vat');
+  html+=`<button class="ctrl-btn ${TOGGLES.vat?'active':''}" onclick="toggle('vat')"><span class="dot" style="background:${vatS.color}"></span>${vatS.label}</button>`;
+  html+='<div class="ctrl-sep"></div>';
+  html+=`<button class="ctrl-btn ${TOGGLES.weighted?'active':''}" onclick="toggle('weighted')" style="border-color:var(--orange)">Weighted</button>`;
+  el.innerHTML=html;
+}
+
+function toggle(id){TOGGLES[id]=!TOGGLES[id];render();}
+
+function computeMonths() {
+  if (!DATA) return [];
+  const w=TOGGLES.weighted;
+  return DATA.months.map(m=>{
+    const cAr=TOGGLES.currentAr?m.currentAr:0;
+    const bAr=TOGGLES.billableAr?m.billableAr:0;
+    const p3=TOGGLES.phase3?(w?m.pipelinePhase3*0.90:m.pipelinePhase3):0;
+    const vat=TOGGLES.vat?m.vatReturn:0;
+    const inflow=cAr+bAr+p3+vat;
+    const ap=TOGGLES.ap?(m.ap||0):0;
+    const cW=TOGGLES.cogsWon?m.cogsWon:0;
+    let cP=0;
+    if(TOGGLES.cogsPipeline&&TOGGLES.phase3) cP=w?m.cogsPhase3*0.90:m.cogsPhase3;
+    const oh=TOGGLES.overhead?m.overhead:0;
+    const outflow=ap+cW+cP+oh;
+    return {month:m.month,currentAr:cAr,billableAr:bAr,committed:p3,ap,cogsWon:cW,cogsPipeline:cP,vat,overhead:oh,inflow,outflow,net:inflow-outflow,_raw:m};
+  });
+}
+
+function render() {
+  if(!DATA)return;
+  renderToggles();
+  const c=computeMonths();
+  renderKPIs(c);
+  renderPNL(c);       // Table first — chart reads column positions from it
+  renderChart(c);     // Chart reads table column rects for alignment
+  renderLegend();
+}
+
+function renderKPIs(c) {
+  const bank=DATA.bankBalance;
+  const totIn=c.reduce((s,m)=>s+m.inflow,0);
+  const totOut=c.reduce((s,m)=>s+m.outflow,0);
+  const m3=c.slice(0,3).reduce((s,m)=>s+m.net,0);
+  const endPos=bank+c.reduce((s,m)=>s+m.net,0);
+  document.getElementById('kpis').innerHTML=`
+    <div class="kpi"><div class="kpi-label">Opening Balance</div><div class="kpi-value">${SHORT(bank)}</div><div class="kpi-caption">${DATA.bankBalanceSource==='manual'?'manual entry':'from exact online'}</div></div>
+    <div class="kpi"><div class="kpi-label">3-Month Position</div><div class="kpi-value">${SHORT(bank+m3)}</div><div class="kpi-caption">cash in 3 months</div></div>
+    <div class="kpi"><div class="kpi-label">12-Month End</div><div class="kpi-value">${SHORT(endPos)}</div><div class="kpi-caption">projected position</div></div>
+    <div class="kpi"><div class="kpi-label">Total Inflows</div><div class="kpi-value">${SHORT(totIn)}</div><div class="kpi-caption">active series</div></div>
+    <div class="kpi"><div class="kpi-label">Total Outflows</div><div class="kpi-value">${SHORT(totOut)}</div><div class="kpi-caption">active series</div></div>
+    <div class="kpi"><div class="kpi-label">12M Net</div><div class="kpi-value">${SHORT(totIn-totOut)}</div><div class="kpi-caption">inflows - outflows</div></div>
+  `;
+}
+
+function renderChart(c) {
+  const el=document.getElementById('chart');
+  el.innerHTML='';
+  const H=400,W=el.offsetWidth||800;
+
+  // ─── 1. Find all extremes (bars + cash line) ─────────────
+  let maxBarUp=0, maxBarDown=0;
+  c.forEach(m=>{maxBarUp=Math.max(maxBarUp,m.inflow);maxBarDown=Math.max(maxBarDown,m.outflow);});
+
+  let cash=DATA.bankBalance, cashMax=cash, cashMin=cash;
+  c.forEach(m=>{cash+=m.net;cashMax=Math.max(cashMax,cash);cashMin=Math.min(cashMin,cash);});
+
+  // The chart must show: all bar tops, all bar bottoms, entire cash line, AND zero
+  const maxAbove=Math.max(maxBarUp, cashMax, 0) * 1.1; // pad 10%
+  const maxBelow=Math.max(maxBarDown, cashMin<0?Math.abs(cashMin):0) * 1.1;
+
+  // Ensure zero is always visible and reasonably centered
+  // Minimum 20% of chart for each side so zero isn't at the edge
+  const minAbove=Math.max(maxAbove, (maxAbove+maxBelow)*0.15);
+  const minBelow=Math.max(maxBelow, (maxAbove+maxBelow)*0.15);
+
+  const totalRange=minAbove+minBelow||1;
+  const zeroY=(minAbove/totalRange)*H;
+  const scale=H/totalRange;
+
+  // ─── 2. Y-axis ticks ─────────────────────────────────────
+  const maxTick=Math.max(minAbove,minBelow);
+  const rawStep=maxTick/5;
+  const mag=Math.pow(10,Math.floor(Math.log10(rawStep)));
+  const niceStep=[1,2,5,10].map(m=>m*mag).find(s=>maxTick/s<=6)||mag*10;
+
+  for(let v=niceStep;v<=minAbove;v+=niceStep){
+    const y=zeroY-v*scale;if(y<5)break;
+    el.innerHTML+=`<div class="y-tick" style="top:${y}px">${SHORT(v)}</div><div class="grid-h" style="top:${y}px"></div>`;
+  }
+  for(let v=niceStep;v<=minBelow;v+=niceStep){
+    const y=zeroY+v*scale;if(y>H-5)break;
+    el.innerHTML+=`<div class="y-tick" style="top:${y}px">${SHORT(-v)}</div><div class="grid-h" style="top:${y}px"></div>`;
+  }
+  el.innerHTML+=`<div class="zero-line" style="top:${zeroY}px"></div><div class="y-tick" style="top:${zeroY}px;font-weight:700">0</div>`;
+
+  // ─── 3. Column positions — read from rendered table ───────
+  const tbl=document.getElementById('pnl-table');
+  const thCells=tbl?tbl.querySelectorAll('thead th'):[];
+  const n=c.length;
+  let colCenters=[];
+  const chartRect=el.getBoundingClientRect();
+
+  if(thCells.length>=n+1){
+    // Skip first th (row label), read month ths, skip last (total)
+    for(let i=1;i<=n;i++){
+      const r=thCells[i].getBoundingClientRect();
+      // Position relative to chart canvas
+      const cx=r.left+r.width/2-chartRect.left;
+      const cw=r.width;
+      colCenters.push({x:cx,w:cw});
+    }
+  } else {
+    // Fallback: evenly distribute
+    const step=W/(n+1);
+    for(let i=0;i<n;i++) colCenters.push({x:(i+0.5)*step,w:step});
+  }
+
+  const barW=Math.min(40, (colCenters[0]?.w||60)-8);
+
+  // ─── 4. Bars ──────────────────────────────────────────────
+  c.forEach((m,i)=>{
+    const x=colCenters[i].x;
+    [{val:m.currentAr,c:'#82D780'},{val:m.billableAr,c:'#0086D5'},{val:m.committed,c:'#D8E1EB'},{val:m.vat,c:'#8F9A8F'}].filter(p=>p.val>0).reduce((cum,p)=>{
+      const h=p.val*scale;el.innerHTML+=`<div class="bar-seg" style="left:${x-barW/2}px;top:${zeroY-cum-h}px;width:${barW}px;height:${h}px;background:${p.c};border:1px solid var(--ink)" title="${EUR(p.val)}"></div>`;return cum+h;
+    },0);
+    [{val:m.ap,c:'#C0392B'},{val:m.cogsWon,c:'#887550'},{val:m.cogsPipeline,c:'#BD6A55'},{val:m.overhead,c:'#F7E5DF'}].filter(p=>p.val>0).reduce((cum,p)=>{
+      const h=p.val*scale;el.innerHTML+=`<div class="bar-seg" style="left:${x-barW/2}px;top:${zeroY+cum}px;width:${barW}px;height:${h}px;background:${p.c};border:1px solid var(--ink)" title="${EUR(-p.val)}"></div>`;return cum+h;
+    },0);
+  });
+
+  // ─── 5. Cash position line ────────────────────────────────
+  cash=DATA.bankBalance;
+  const pts=c.map((m,i)=>{cash+=m.net;return{x:colCenters[i].x,y:zeroY-cash*scale,cash};});
+  const startY=zeroY-DATA.bankBalance*scale;
+  const startX=colCenters[0].x-(colCenters[0].w/2);
+  let d=`M ${startX} ${startY}`;pts.forEach(p=>{d+=` L ${p.x} ${p.y}`;});
+  let svg=`<svg class="line-overlay" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"><path d="${d}" fill="none" stroke="#1A1814" stroke-width="3.5"/>`;
+  pts.forEach(p=>{svg+=`<circle cx="${p.x}" cy="${p.y}" r="5" fill="#1A1814" stroke="#EAE6DF" stroke-width="2"/>`;});
+  svg+=`</svg>`;el.innerHTML+=svg;
+
+  // Value labels
+  el.innerHTML+=`<div style="position:absolute;left:${startX-4}px;top:${startY-16}px;font-size:9px;font-weight:700;font-family:var(--mono);letter-spacing:1px">${SHORT(DATA.bankBalance)}</div>`;
+  const lp=pts[pts.length-1];
+  el.innerHTML+=`<div style="position:absolute;left:${lp.x+6}px;top:${lp.y-6}px;font-size:9px;font-weight:700;font-family:var(--mono);letter-spacing:1px">${SHORT(lp.cash)}</div>`;
+}
+
+function renderLegend() {
+  const el=document.getElementById('legend');
+  let html='';
+  SERIES.forEach(s=>{if(TOGGLES[s.id])html+=`<div class="legend-item"><div class="legend-dot" style="background:${s.color}"></div>${s.label}</div>`;});
+  html+=`<div class="legend-item"><div class="legend-dot" style="background:var(--ink)"></div>Cash Position</div>`;
+  el.innerHTML=html;
+}
+
+function renderPNL(c) {
+  const tbl=document.getElementById('pnl-table');
+  const v=(n,fc)=>n>0?`<span class="${fc?'forecast':''}">${EUR(n)}</span>`:(n<0?EUR(n):'<span class="ghost">—</span>');
+  let cashByMonth=[];let cash=DATA.bankBalance;
+  c.forEach(m=>{cash+=m.net;cashByMonth.push(cash);});
+
+  const rows=[
+    {label:'Current AR',  fn:m=>m.currentAr},
+    {label:'Billable AR', fn:m=>m.billableAr},
+    {label:'Committed',   fn:m=>m.committed, fc:true},
+    {label:'Total Inflow',fn:m=>m.inflow, sep:true},
+    {label:'AP',          fn:m=>-m.ap},
+    {label:'COGS',        fn:m=>-(m.cogsWon+m.cogsPipeline)},
+    {label:'VAT Returns', fn:m=>m.vat},
+    {label:'Overhead',    fn:m=>-m.overhead},
+    {label:'Total Outflow',fn:m=>-m.outflow, sep:true},
+    {label:'Net',         fn:(m,i)=>m.net, sep:true},
+    {label:'Cash Position',fn:(m,i)=>cashByMonth[i], total:true},
+  ];
+
+  let html='<thead><tr><th class="row-hdr"></th>';
+  c.forEach(m=>{
+    const exp=EXPANDED_MONTH===m.month?' expanded':'';
+    html+=`<th class="month-hdr${exp}" onclick="drillDown('${m.month}')">${shortMonth(m.month)}</th>`;
+  });
+  html+='<th class="total-hdr">Total</th></tr></thead><tbody>';
+
+  rows.forEach(row=>{
+    const cls=row.sep?' class="row-sep"':row.total?' class="row-total row-cash"':'';
+    html+=`<tr${cls}><td>${row.label}</td>`;
+    c.forEach((m,i)=>{
+      const val=row.fn(m,i);
+      // Cash position: negative = black bg + orange text
+      const cellCls = row.total && val < 0 ? 'cell-neg' : (row.fc ? 'forecast' : '');
+      html+=`<td class="${cellCls}">${v(val,row.fc)}</td>`;
+    });
+    if(row.total){
+      const endVal=cashByMonth[cashByMonth.length-1];
+      html+=`<td class="${endVal<0?'cell-neg':''}">${EUR(endVal)}</td>`;
+    }
+    else{const t=c.reduce((s,m,i)=>s+row.fn(m,i),0);html+=`<td>${v(t,row.fc)}</td>`;}
+    html+='</tr>';
+  });
+  html+='</tbody>';tbl.innerHTML=html;
+}
+
+function drillDown(mk) {
+  const panel=document.getElementById('detail-panel');
+  if(EXPANDED_MONTH===mk){EXPANDED_MONTH=null;panel.style.display='none';panel.innerHTML='';render();return;}
+  EXPANDED_MONTH=mk;
+  const m=DATA.months.find(m=>m.month===mk);
+  if(!m)return;
+
+  const totalValue=(items)=>items.reduce((s,i)=>s+i.amount,0);
+  const pctBar=(paid,total)=>{
+    if(total<=0)return '';
+    const pPct=Math.min(100,Math.round((paid/total)*100));
+    return `<div class="pay-bar"><div class="paid" style="width:${pPct}%"></div><div class="outstanding" style="width:${100-pPct}%"></div></div><div class="pay-info">${pPct}% received</div>`;
+  };
+
+  let html=`<div class="detail-section">`;
+  html+=`<div class="detail-hero"><div class="detail-title">${shortMonth(mk)} BREAKDOWN</div><button class="detail-close" onclick="drillDown('${mk}')">Close</button></div>`;
+
+  // Unified project table for Current AR
+  if(m.currentArItems&&m.currentArItems.length>0){
+    html+=`<div class="detail-sub">Current AR — ${m.currentArItems.length} invoices · ${EUR(totalValue(m.currentArItems))}</div>`;
+    html+=`<table class="dtbl"><thead><tr><th>Customer</th><th>Invoice</th><th>Job No.</th><th>Due Date</th><th>Status</th><th class="right">Amount</th></tr></thead><tbody>`;
+    m.currentArItems.forEach(item=>{
+      html+=`<tr><td>${item.projectName}</td><td class="">${item.label}</td><td class="">${item.jobNo||'—'}</td><td class="">${new Date(item.expectedDate).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'2-digit'})}</td><td class="">${item.status}</td><td class="right">${EUR(item.amount)}</td></tr>`;
+    });
+    html+='</tbody></table>';
+  }
+
+  // Billable AR
+  if(m.billableArItems&&m.billableArItems.length>0){
+    html+=`<div class="detail-sub">Billable AR — ${m.billableArItems.length} milestones · ${EUR(totalValue(m.billableArItems))}</div>`;
+    html+=`<table class="dtbl"><thead><tr><th>Project</th><th>Type</th><th>Job No.</th><th>Milestone</th><th>Status</th><th style="width:120px">Payment Progress</th><th class="right">Amount</th></tr></thead><tbody>`;
+    m.billableArItems.forEach(item=>{
+      const msMatch=item.label?.match(/(\d)\w*/);
+      const msNum=msMatch?parseInt(msMatch[1]):1;
+      const totalMs=2; // default assumption
+      const paidPct=item.status==='received'?100:item.status==='invoiced'?50:0;
+      html+=`<tr><td>${item.projectName}</td><td>${item.projectType}</td><td class="">${item.jobNo||'—'}</td><td class="">${item.label||'—'} (${msNum} of ${totalMs})</td><td class="">${item.status}</td><td>${pctBar(paidPct,100)}</td><td class="right">${EUR(item.amount)}</td></tr>`;
+    });
+    html+='</tbody></table>';
+  }
+
+  // Committed Pipeline
+  if(m.pipelinePhase3Items&&m.pipelinePhase3Items.length>0){
+    html+=`<div class="detail-sub">Committed Pipeline — ${m.pipelinePhase3Items.length} milestones · ${EUR(totalValue(m.pipelinePhase3Items))}</div>`;
+    html+=`<table class="dtbl"><thead><tr><th>Opportunity</th><th>Type</th><th>Job No.</th><th>Milestone</th><th>Trigger</th><th style="width:120px">Payment Progress</th><th class="right">Amount</th></tr></thead><tbody>`;
+    m.pipelinePhase3Items.forEach(item=>{
+      html+=`<tr><td>${item.projectName}</td><td>${item.projectType}</td><td class="">${item.jobNo||'—'}</td><td class="">${item.label||'—'}</td><td class="">${item.trigger||'—'}</td><td>${pctBar(0,100)}</td><td class="right">${EUR(item.amount)}</td></tr>`;
+    });
+    html+='</tbody></table>';
+  }
+
+  // AP
+  if(m.apItems&&m.apItems.length>0){
+    html+=`<div class="detail-sub">Accounts Payable — ${m.apItems.length} items · ${EUR(totalValue(m.apItems))}</div>`;
+    html+=`<table class="dtbl"><thead><tr><th>Vendor</th><th>Invoice</th><th>Due Date</th><th class="right">Amount</th></tr></thead><tbody>`;
+    m.apItems.forEach(item=>{
+      html+=`<tr><td>${item.projectName}</td><td class="">${item.label}</td><td class="">${new Date(item.expectedDate).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'2-digit'})}</td><td class="right">${EUR(item.amount)}</td></tr>`;
+    });
+    html+='</tbody></table>';
+  }
+
+  if((!m.currentArItems||!m.currentArItems.length)&&(!m.billableArItems||!m.billableArItems.length)&&(!m.pipelinePhase3Items||!m.pipelinePhase3Items.length)&&(!m.apItems||!m.apItems.length)){
+    html+=`<div style="padding:20px 18px;font-size:9px;font-weight:300;color:var(--dim)">no detail items for this month</div>`;
+  }
+  html+='</div>';
+  panel.innerHTML=html;panel.style.display='block';
+  panel.scrollIntoView({behavior:'smooth',block:'start'});
+  render();
+}
+
+async function loadData() {
+  document.getElementById('ts').textContent='last updated: '+new Date().toLocaleString('nl-NL').toLowerCase();
+  const bv=document.getElementById('bank-input').value.trim();
+  const params=bv?`?bankBalance=${encodeURIComponent(bv)}`:'';
+  try{
+    const res=await fetch(`${API}/api/dashboard/cash-position${params}`);
+    if(!res.ok)throw new Error(`HTTP ${res.status}`);
+    const json=await res.json();
+    if(json.error)throw new Error(json.error);
+    DATA=json;
+    if(!bv&&DATA.bankBalance>0)document.getElementById('bank-input').value=Math.round(DATA.bankBalance);
+    render();
+  }catch(e){
+    document.getElementById('kpis').innerHTML=`<div class="kpi" style="grid-column:span 6"><div class="kpi-label">Error</div><div class="kpi-value" style="font-size:11px">${e.message}</div></div>`;
+  }
+}
+
+async function loadStatus() {
+  try{
+    const res=await fetch(`${API}/api/dashboard/status`);if(!res.ok)return;
+    const s=await res.json();if(s.error)return;
+    const el=document.getElementById('status-bar');
+    const dOk=s.dynamics.connected&&s.dynamics.tokenValid;
+    const cOk=s.clickup.connected&&s.clickup.projectsSynced>0;
+    const eOk=s.exact.connected&&s.exact.tokenValid;
+    el.innerHTML=`
+      <div class="status-item"><span class="status-dot ${dOk?'ok':'off'}"></span><span class="status-name">Dynamics</span><span class="status-detail">${dOk?s.dynamics.projectsSynced+' opps':'—'}</span><button class="sync-btn" onclick="runSync('dynamics')">Sync</button></div>
+      <div class="status-item"><span class="status-dot ${cOk?'ok':'off'}"></span><span class="status-name">ClickUp</span><span class="status-detail">${cOk?s.clickup.projectsSynced+' projects':'—'}</span><button class="sync-btn" onclick="runSync('clickup')">Sync</button></div>
+      <div class="status-item"><span class="status-dot ${eOk?'ok':'off'}"></span><span class="status-name">Exact</span><span class="status-detail">${eOk?'AR '+s.exact.arItems.total:'—'}</span><button class="sync-btn" onclick="runSync('exact')">Sync</button></div>
+    `;
+  }catch(e){}
+}
+
+async function runSync(provider) {
+  const btn=event.target;btn.textContent='...';btn.disabled=true;
+  try{
+    const res=await fetch(`${API}/api/sync/${provider}`,{method:'POST'});
+    const data=await res.json();
+    btn.textContent=data.error?'ERR':'OK';
+    setTimeout(()=>{btn.textContent='Sync';btn.disabled=false;loadStatus();loadData();},1000);
+  }catch(e){btn.textContent='ERR';setTimeout(()=>{btn.textContent='Sync';btn.disabled=false;},2000);}
+}
+
+loadStatus();loadData();
+</script>
+</body>
+</html>

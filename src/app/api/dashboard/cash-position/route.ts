@@ -12,6 +12,7 @@ import {
   VAT_RETURN_RATE,
   type ProjectType,
 } from "@/lib/types";
+import { fetchPayables, parseExactDate } from "@/lib/exact";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -73,6 +74,8 @@ interface MonthData {
   pipelinePhase2Items: MilestoneItem[];
   pipelinePhase3: number;
   pipelinePhase3Items: MilestoneItem[];
+  ap: number;
+  apItems: MilestoneItem[];
   cogsWon: number;
   cogsPhase1: number;
   cogsPhase2: number;
@@ -120,6 +123,7 @@ export async function GET(request: Request) {
         pipelinePhase1: 0, pipelinePhase1Items: [],
         pipelinePhase2: 0, pipelinePhase2Items: [],
         pipelinePhase3: 0, pipelinePhase3Items: [],
+        ap: 0, apItems: [],
         cogsWon: 0, cogsPhase1: 0, cogsPhase2: 0, cogsPhase3: 0,
         vatReturn: 0, overhead: 0,
       };
@@ -181,6 +185,30 @@ export async function GET(request: Request) {
         });
         months[mk].cogsWon += calcCOGS(ms.amount, type);
       }
+    }
+
+    // ─── AP: Accounts Payable (Exact) ─────────────────────
+
+    try {
+      const payables = await fetchPayables();
+      for (const item of payables.items) {
+        const dueDate = parseExactDate(item.DueDate);
+        const mk = bucketMonth(dueDate);
+        if (!mk) continue;
+        const amount = Math.abs(item.Amount || 0);
+        months[mk].ap += amount;
+        months[mk].apItems.push({
+          projectName: item.AccountName || "Unknown vendor",
+          jobNo: null,
+          projectType: "—",
+          label: String(item.InvoiceNumber || "—"),
+          amount,
+          expectedDate: dueDate.toISOString(),
+          status: "payable",
+        });
+      }
+    } catch (e) {
+      console.error("AP fetch failed:", e instanceof Error ? e.message : e);
     }
 
     // ─── LAYER 3: Pipeline AR (Dynamics open opportunities) ─
@@ -372,6 +400,8 @@ export async function GET(request: Request) {
         pipelinePhase2Items: m.pipelinePhase2Items,
         pipelinePhase3: r(m.pipelinePhase3),
         pipelinePhase3Items: m.pipelinePhase3Items,
+        ap: r(m.ap),
+        apItems: m.apItems,
         cogsWon: r(m.cogsWon),
         cogsPhase1: r(m.cogsPhase1),
         cogsPhase2: r(m.cogsPhase2),
@@ -389,6 +419,7 @@ export async function GET(request: Request) {
         pipelinePhase1: acc.pipelinePhase1 + m.pipelinePhase1,
         pipelinePhase2: acc.pipelinePhase2 + m.pipelinePhase2,
         pipelinePhase3: acc.pipelinePhase3 + m.pipelinePhase3,
+        ap: acc.ap + m.ap,
         cogsWon: acc.cogsWon + m.cogsWon,
         cogsPipeline: acc.cogsPipeline + m.cogsPhase1 + m.cogsPhase2 + m.cogsPhase3,
         vatReturn: acc.vatReturn + m.vatReturn,
@@ -397,7 +428,7 @@ export async function GET(request: Request) {
       {
         currentAr: 0, billableAr: 0,
         pipelinePhase1: 0, pipelinePhase2: 0, pipelinePhase3: 0,
-        cogsWon: 0, cogsPipeline: 0, vatReturn: 0, overhead: 0,
+        ap: 0, cogsWon: 0, cogsPipeline: 0, vatReturn: 0, overhead: 0,
       }
     );
 
@@ -419,11 +450,12 @@ export async function GET(request: Request) {
             totals.currentAr + totals.billableAr +
             totals.pipelinePhase1 + totals.pipelinePhase2 + totals.pipelinePhase3
           ),
+          ap: r(totals.ap),
           cogsWon: r(totals.cogsWon),
           cogsPipeline: r(totals.cogsPipeline),
           vatReturn: r(totals.vatReturn),
           overhead: r(totals.overhead),
-          totalOutflows: r(totals.cogsWon + totals.cogsPipeline + totals.overhead - totals.vatReturn),
+          totalOutflows: r(totals.ap + totals.cogsWon + totals.cogsPipeline + totals.overhead - totals.vatReturn),
         },
         pipeline: {
           totalOpportunities: pipelineData.length,

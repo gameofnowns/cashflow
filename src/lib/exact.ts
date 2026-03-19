@@ -243,6 +243,7 @@ interface ExactPayable {
   InvoiceDate: string;
   DueDate: string;
   CurrencyCode: string;
+  Description?: string;
 }
 
 /**
@@ -337,7 +338,7 @@ export function extractJobNo(description: string | null | undefined): string | n
  * Parse Exact Online's date format.
  * Exact returns dates as "/Date(1234567890)/" or ISO strings.
  */
-function parseExactDate(dateStr: string | null | undefined): Date {
+export function parseExactDate(dateStr: string | null | undefined): Date {
   if (!dateStr) return new Date();
   // Handle /Date(ms)/ format
   const msMatch = dateStr.match(/\/Date\((\d+)\)\//);
