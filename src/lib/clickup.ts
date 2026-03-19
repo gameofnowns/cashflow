@@ -41,7 +41,7 @@ const RECEIVED_STATUS_IDS = new Set([
   "3074d653-dbbf-4e5e-b836-9d92eedd4aea", // Final Payment: Received
 ]);
 
-// Statuses that indicate an active/won project (everything except template, not started, shipped, cancelled, complete)
+// Statuses to exclude from sync (not active projects)
 const CLOSED_STATUSES = new Set([
   "shipped",
   "cancelled",
@@ -49,6 +49,8 @@ const CLOSED_STATUSES = new Set([
   "00 - complete",
   "template",
   "not started",
+  "z - hold",
+  "hold",
 ]);
 
 /**
