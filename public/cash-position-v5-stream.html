@@ -98,6 +98,41 @@
   .cmd-container.open .cmd-collapse{display:inline-block;}
   .cmd-collapse:hover{color:var(--orange);border-color:var(--orange);}
 
+  /* ─── SETUP BANNER ──────────────────────────────────────── */
+  .setup-banner{border-bottom:var(--grid);display:none;flex-shrink:0;}
+  .setup-banner.show{display:block;}
+  .setup-header{padding:10px 18px;background:var(--ink);color:var(--bg);display:flex;align-items:center;justify-content:space-between;}
+  .setup-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:3px;}
+  .setup-dismiss{font-size:8px;color:var(--ghost);cursor:pointer;padding:4px 8px;border:1px solid var(--ghost);letter-spacing:1px;}
+  .setup-dismiss:hover{color:var(--orange);border-color:var(--orange);}
+  .setup-body{display:flex;gap:0;}
+  .setup-card{flex:1;padding:14px 18px;border-right:var(--grid);display:flex;align-items:center;gap:12px;}
+  .setup-card:last-child{border-right:none;}
+  .setup-card-dot{width:8px;height:8px;flex-shrink:0;}
+  .setup-card-dot.ok{background:var(--green);}
+  .setup-card-dot.off{background:var(--terracotta);}
+  .setup-card-dot.warn{background:var(--orange);}
+  .setup-card-info{flex:1;}
+  .setup-card-name{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:2px;margin-bottom:2px;}
+  .setup-card-detail{font-size:8px;color:var(--dim);line-height:1.4;}
+  .setup-card-detail.ok{color:var(--green);}
+  .setup-card-btn{font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;padding:6px 14px;border:var(--grid);background:transparent;color:var(--ink);cursor:pointer;transition:all 100ms;flex-shrink:0;}
+  .setup-card-btn:hover{background:var(--orange);color:#fff;border-color:var(--orange);}
+  .setup-card-btn.connected{background:var(--ink);color:var(--bg);cursor:default;}
+  /* Login overlay */
+  .login-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:var(--bg);z-index:1000;display:none;align-items:center;justify-content:center;}
+  .login-overlay.show{display:flex;}
+  .login-box{text-align:center;width:320px;}
+  .login-logo{margin-bottom:24px;}
+  .login-title{font-size:28px;font-weight:700;text-transform:uppercase;letter-spacing:6px;margin-bottom:8px;}
+  .login-sub{font-size:9px;color:var(--dim);margin-bottom:24px;letter-spacing:0.3px;}
+  .login-input{width:100%;padding:10px 14px;border:var(--grid);background:transparent;font-size:11px;font-weight:700;letter-spacing:1px;text-align:center;margin-bottom:12px;}
+  .login-input:focus{outline:2px solid var(--orange);}
+  .login-input::placeholder{color:var(--ghost);font-weight:300;}
+  .login-btn{width:100%;padding:10px;background:var(--ink);color:var(--bg);border:none;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:2px;cursor:pointer;transition:background 150ms;}
+  .login-btn:hover{background:var(--orange);}
+  .login-error{font-size:9px;color:var(--terracotta);margin-top:8px;}
+
   /* ─── CHART AREA — fills remaining viewport ────────────── */
   .chart-area{flex:1;min-height:200px;position:relative;overflow:hidden;border-bottom:var(--grid);}
   .chart-canvas{position:absolute;top:0;left:120px;right:0;bottom:0;border-left:var(--grid);}
@@ -189,6 +224,27 @@
 </head>
 <body>
 
+<!-- LOGIN OVERLAY -->
+<div class="login-overlay" id="login-overlay">
+  <div class="login-box">
+    <div class="login-logo"><svg width="164" height="22" viewBox="0 0 328 41" fill="none" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" clip-rule="evenodd" d="M65.4138 0H76.3161V24.2839C76.3161 31.1677 72.3342 37.047 65.8835 39.6833C59.4327 42.3195 52.4042 40.9378 47.4664 36.0712L39.752 28.4617L10.9023 0H26.3185L55.1682 28.4576L65.4096 38.5599V0H65.4138ZM317.098 0H328V24.2839C328 31.1677 324.018 37.047 317.567 39.6833C311.117 42.3195 304.088 40.9378 299.15 36.0712L291.436 28.4617L262.586 0V40.9993H251.684V0H278.002L306.852 28.4576L317.094 38.5599V0H317.098ZM158.077 0H147.175V24.2839C147.175 31.1677 151.157 37.047 157.607 39.6833C164.058 42.3195 171.087 40.9378 176.025 36.0712L183.739 28.4617L186.345 25.8911C186.914 32.0738 190.763 37.2561 196.703 39.6833C203.154 42.3195 210.182 40.9378 215.12 36.0712L222.834 28.4617L251.684 0H236.268L207.418 28.4576L197.177 38.5599V15.2067L212.589 0H197.172L168.323 28.4576L158.081 38.5599V0H158.077ZM133.55 9.40935H89.9408V31.59H133.55V9.40935ZM98.4574 0H125.029C135.724 0 144.448 8.60576 144.448 19.1549V21.8444C144.448 32.3936 135.724 40.9993 125.029 40.9993H98.4574C87.7629 40.9993 79.0386 32.3936 79.0386 21.8444V19.1549C79.0386 8.60576 87.7629 0 98.4574 0ZM0 0H10.9023V40.9993H0V0Z" fill="#1A1814"/></svg></div>
+    <div class="login-title">CASHFLOWS</div>
+    <div class="login-sub">enter password to continue</div>
+    <input class="login-input" id="login-pw" type="password" placeholder="password" onkeydown="if(event.key==='Enter')doLogin()">
+    <button class="login-btn" onclick="doLogin()">Sign In</button>
+    <div class="login-error" id="login-error"></div>
+  </div>
+</div>
+
+<!-- SETUP BANNER -->
+<div class="setup-banner" id="setup-banner">
+  <div class="setup-header">
+    <span class="setup-title">Connect Data Sources</span>
+    <span class="setup-dismiss" onclick="document.getElementById('setup-banner').classList.remove('show')">DISMISS ✕</span>
+  </div>
+  <div class="setup-body" id="setup-body"></div>
+</div>
+
 <div class="r1">
   <div class="r1-logo"><svg width="164" height="22" viewBox="0 0 328 41" fill="none" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" clip-rule="evenodd" d="M65.4138 0H76.3161V24.2839C76.3161 31.1677 72.3342 37.047 65.8835 39.6833C59.4327 42.3195 52.4042 40.9378 47.4664 36.0712L39.752 28.4617L10.9023 0H26.3185L55.1682 28.4576L65.4096 38.5599V0H65.4138ZM317.098 0H328V24.2839C328 31.1677 324.018 37.047 317.567 39.6833C311.117 42.3195 304.088 40.9378 299.15 36.0712L291.436 28.4617L262.586 0V40.9993H251.684V0H278.002L306.852 28.4576L317.094 38.5599V0H317.098ZM158.077 0H147.175V24.2839C147.175 31.1677 151.157 37.047 157.607 39.6833C164.058 42.3195 171.087 40.9378 176.025 36.0712L183.739 28.4617L186.345 25.8911C186.914 32.0738 190.763 37.2561 196.703 39.6833C203.154 42.3195 210.182 40.9378 215.12 36.0712L222.834 28.4617L251.684 0H236.268L207.418 28.4576L197.177 38.5599V15.2067L212.589 0H197.172L168.323 28.4576L158.081 38.5599V0H158.077ZM133.55 9.40935H89.9408V31.59H133.55V9.40935ZM98.4574 0H125.029C135.724 0 144.448 8.60576 144.448 19.1549V21.8444C144.448 32.3936 135.724 40.9993 125.029 40.9993H98.4574C87.7629 40.9993 79.0386 32.3936 79.0386 21.8444V19.1549C79.0386 8.60576 87.7629 0 98.4574 0ZM0 0H10.9023V40.9993H0V0Z" fill="#1A1814"/></svg></div>
   <div class="r1-metrics" id="metrics"></div>
@@ -233,7 +289,7 @@ const K=(n)=>{const a=Math.abs(n);const s=n<0?'-':'';if(a>=1e6)return s+(a/1e6).
 const sm=(mk)=>{const[y,mo]=mk.split('-');return['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(mo)-1]+' '+y.slice(2);};
 
 let D=null,EXP=null;
-let MODE=localStorage.getItem('nown-chart-mode')||'bars';
+let MODE=localStorage.getItem('nown-chart-mode')||'stream';
 let T={currentAr:true,billableAr:true,phase3:true,ap:true,cogsWon:true,cogsPipeline:true,vat:true,overhead:true,weighted:false};
 
 // Series colors — single source of truth
@@ -805,7 +861,87 @@ async function loadAll(){
 }
 async function runSync(p){try{await fetch(`${API}/api/sync/${p}`,{method:'POST'});setTimeout(loadAll,500);}catch{}}
 
-loadAll();
+// ─── Login ──────────────────────────────────────────────────
+async function checkAuth(){
+  try{
+    const res=await fetch(`${API}/api/dashboard/status`,{credentials:'include'});
+    if(res.status===401||res.status===307||res.redirected){
+      document.getElementById('login-overlay').classList.add('show');
+      return false;
+    }
+    return true;
+  }catch{return true;} // No auth required if no APP_PASSWORD
+}
+
+async function doLogin(){
+  const pw=document.getElementById('login-pw').value;
+  const errEl=document.getElementById('login-error');
+  errEl.textContent='';
+  try{
+    const res=await fetch(`${API}/api/login`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pw}),credentials:'include'});
+    if(res.ok){
+      document.getElementById('login-overlay').classList.remove('show');
+      loadAll();
+    } else {
+      errEl.textContent='incorrect password';
+    }
+  }catch(e){errEl.textContent='connection error';}
+}
+
+// ─── Setup Banner ───────────────────────────────────────────
+async function checkSetup(){
+  try{
+    const res=await fetch(`${API}/api/dashboard/status`,{credentials:'include'});
+    if(!res.ok)return;
+    const s=await res.json();
+    if(s.error)return;
+
+    const banner=document.getElementById('setup-banner');
+    const body=document.getElementById('setup-body');
+    const dOk=s.dynamics?.connected&&s.dynamics?.tokenValid;
+    const cOk=s.clickup?.connected&&(s.clickup?.projectsSynced||0)>0;
+    const eOk=s.exact?.connected&&s.exact?.tokenValid;
+
+    // If all connected, hide banner
+    if(dOk&&cOk&&eOk){banner.classList.remove('show');return;}
+
+    banner.classList.add('show');
+    body.innerHTML=`
+      <div class="setup-card">
+        <span class="setup-card-dot ${eOk?'ok':'off'}"></span>
+        <div class="setup-card-info">
+          <div class="setup-card-name">Exact Online</div>
+          <div class="setup-card-detail ${eOk?'ok':''}">${eOk?'Connected — Bank EUR '+K(s.exact?.bankBalance||0)+', AR '+s.exact?.arItems?.total+' items':'Not connected — AR, AP, bank balance'}</div>
+        </div>
+        ${eOk?'<span class="setup-card-btn connected">Connected</span>':`<a href="${API}/api/auth/exact" class="setup-card-btn">Connect Exact</a>`}
+      </div>
+      <div class="setup-card">
+        <span class="setup-card-dot ${dOk?'ok':'off'}"></span>
+        <div class="setup-card-info">
+          <div class="setup-card-name">Dynamics 365</div>
+          <div class="setup-card-detail ${dOk?'ok':''}">${dOk?'Connected — '+s.dynamics.projectsSynced+' pipeline opps':'Not connected — quotes, pipeline, payment terms'}</div>
+        </div>
+        ${dOk?'<span class="setup-card-btn connected">Connected</span>':`<a href="${API}/api/auth/dynamics" class="setup-card-btn">Connect Dynamics</a>`}
+      </div>
+      <div class="setup-card">
+        <span class="setup-card-dot ${cOk?'ok':'off'}"></span>
+        <div class="setup-card-info">
+          <div class="setup-card-name">ClickUp</div>
+          <div class="setup-card-detail ${cOk?'ok':''}">${cOk?'Connected — '+s.clickup.projectsSynced+' projects, '+s.clickup.milestones+' milestones':'No data — sync to pull projects'}</div>
+        </div>
+        ${cOk?'<span class="setup-card-btn connected">Connected</span>':`<button class="setup-card-btn" onclick="runSync('clickup');setTimeout(checkSetup,3000)">Sync ClickUp</button>`}
+      </div>
+    `;
+  }catch{}
+}
+
+// ─── Init ───────────────────────────────────────────────────
+(async function init(){
+  const authed=await checkAuth();
+  if(!authed)return; // Wait for login
+  loadAll();
+  checkSetup();
+})();
 </script>
 </body>
 </html>
