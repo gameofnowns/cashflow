@@ -202,7 +202,8 @@
   .row-cash td{background:rgba(26,24,20,0.06);border-top:2px solid var(--ink);}
   .row-cash td:first-child{background:var(--ink);color:var(--bg);}
   .cell-neg{background:var(--ink) !important;color:var(--orange) !important;font-weight:700 !important;}
-  .pnl td:last-child{border-left:1px solid rgba(26,24,20,0.1);}
+  .pnl td:last-child{border-left:2px solid var(--ink);}
+  .pnl th:last-child{border-left:2px solid var(--ink);}
 
   /* ─── DETAIL (below fold) ──────────────────────────────── */
   .detail-area{overflow-y:auto;}
@@ -436,6 +437,12 @@ function renderBars(c,cb){
     [{v:m.ap,c:'#C0392B'},{v:m.cogsWon,c:'#887550'},{v:m.cogsPipeline,c:'#BD6A55'},{v:m.overhead,c:'#F7E5DF'}].filter(p=>p.v>0).reduce((cum,p)=>{
       const h=p.v*scale;el.innerHTML+=`<div class="bar-seg" style="left:${x-bw/2}px;top:${zeroY+cum}px;width:${bw}px;height:${h}px;background:${p.c};border:1px solid var(--ink)" title="${EUR(-p.v)}"></div>`;return cum+h;},0);
   });
+
+  // FY Total separator
+  const chartRight=cols[cols.length-1].x+cols[cols.length-1].w/2;
+  el.innerHTML+=`<div style="position:absolute;top:0;bottom:0;left:${chartRight}px;width:1px;background:var(--ink);z-index:5"></div>`;
+  el.innerHTML+=`<div style="position:absolute;top:0;bottom:0;left:${chartRight}px;width:${W-chartRight}px;background:rgba(26,24,20,0.04);z-index:1"></div>`;
+
   renderCashLine(el,c,cb,cols,zeroY,scale,W,H);
 }
 
@@ -579,8 +586,19 @@ function renderStream(c,cb){
   svg+=`<line x1="${todayX}" y1="0" x2="${todayX}" y2="${H}" stroke="#FE6337" stroke-width="1" stroke-dasharray="4,3" opacity="0.3"/>`;
   svg+=`<text x="${todayX}" y="10" font-size="6" fill="#FE6337" opacity="0.5" font-family="var(--font)">TODAY</text>`;
 
+  // FY Total separator — vertical line at the right edge of the 12-month span
+  svg+=`<line x1="${chartRight}" y1="0" x2="${chartRight}" y2="${H}" stroke="#1A1814" stroke-width="1"/>`;
+  // FY Total zone background — subtle fill to distinguish from monthly area
+  svg+=`<rect x="${chartRight}" y="0" width="${W-chartRight}" height="${H}" fill="rgba(26,24,20,0.04)"/>`;
+  // FY Total label
+  svg+=`<text x="${chartRight+(W-chartRight)/2}" y="${H/2-8}" text-anchor="middle" font-size="8" font-weight="700" fill="#A09890" font-family="var(--font)" letter-spacing="2" text-transform="uppercase">FY</text>`;
+  svg+=`<text x="${chartRight+(W-chartRight)/2}" y="${H/2+4}" text-anchor="middle" font-size="8" font-weight="700" fill="#A09890" font-family="var(--font)" letter-spacing="2" text-transform="uppercase">TOTAL</text>`;
+
   svg+=`</svg>`;
   el.innerHTML+=svg;
+
+  // FY separator line extending from chart to table (HTML div, spans the gap)
+  el.innerHTML+=`<div style="position:absolute;top:0;bottom:0;left:${chartRight}px;width:1px;background:var(--ink);z-index:5"></div>`;
 
   // Cash position line on top
   renderCashLine(el,c,cb,cols,zeroY,scale,W,H);
