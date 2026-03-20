@@ -413,6 +413,9 @@ function renderCashLine(el,c,cb,cols,zeroY,scale,W,H){
   const sy=zeroY-bank*scale,sx=cols[0].x-cols[0].w/2;
   const chartRight=cols[cols.length-1].x+cols[cols.length-1].w/2;
   const fyMidX=chartRight+(W-chartRight)/2;
+  // FY Total references December (end of financial year), not last month
+  const decPtIdx=c.reduce((last,m,i)=>m.month.endsWith('-12')?i:last,-1);
+  const fyPt=decPtIdx>=0?pts[decPtIdx]:pts[pts.length-1];
   const lp=pts[pts.length-1];
 
   // Main cash line path
@@ -426,26 +429,26 @@ function renderCashLine(el,c,cb,cols,zeroY,scale,W,H){
   // Data points (hollow circles)
   pts.forEach(p=>{svg+=`<circle cx="${p.x}" cy="${p.y}" r="5" fill="#EAE6DF" stroke="#1A1814" stroke-width="2"/>`;});
 
-  // FY Total zone: dashed continuation line from last point to FY zone
-  svg+=`<line x1="${lp.x}" y1="${lp.y}" x2="${chartRight}" y2="${lp.y}" stroke="#1A1814" stroke-width="2" stroke-dasharray="4,3" opacity="0.4"/>`;
+  // FY Total zone: dashed continuation line from December point to FY zone
+  svg+=`<line x1="${fyPt.x}" y1="${fyPt.y}" x2="${chartRight}" y2="${fyPt.y}" stroke="#1A1814" stroke-width="2" stroke-dasharray="4,3" opacity="0.4"/>`;
 
-  // Orange horizontal bar in the FY Total zone at closing cash position
+  // Orange horizontal bar in the FY Total zone at December cash position
   const barHalfW=(W-chartRight)/2-8;
-  svg+=`<line x1="${chartRight+8}" y1="${lp.y}" x2="${W-8}" y2="${lp.y}" stroke="#FE6337" stroke-width="3.5" stroke-linecap="butt"/>`;
+  svg+=`<line x1="${chartRight+8}" y1="${fyPt.y}" x2="${W-8}" y2="${fyPt.y}" stroke="#FE6337" stroke-width="3.5" stroke-linecap="butt"/>`;
 
   // Orange endpoint dot
-  svg+=`<circle cx="${fyMidX}" cy="${lp.y}" r="5" fill="#FE6337" stroke="#EAE6DF" stroke-width="2"/>`;
+  svg+=`<circle cx="${fyMidX}" cy="${fyPt.y}" r="5" fill="#FE6337" stroke="#EAE6DF" stroke-width="2"/>`;
 
   // Zero reference line in FY zone
   svg+=`<line x1="${chartRight+4}" y1="${zeroY}" x2="${W-4}" y2="${zeroY}" stroke="#A09890" stroke-width="0.5" stroke-dasharray="2,2" opacity="0.5"/>`;
 
   // FY closing value label (centered in zone, above the orange bar)
-  const labelY=lp.y<zeroY?lp.y-12:lp.y+16;
-  const valColor=lp.cash<0?'#BD6A55':'#FE6337';
-  svg+=`<text x="${fyMidX}" y="${labelY}" text-anchor="middle" font-size="11" font-weight="700" fill="${valColor}" font-family="var(--font)" letter-spacing="1">${lp.cash<0?'- ':''}EUR ${K(Math.abs(lp.cash))}</text>`;
+  const labelY=fyPt.y<zeroY?fyPt.y-12:fyPt.y+16;
+  const valColor=fyPt.cash<0?'#BD6A55':'#FE6337';
+  svg+=`<text x="${fyMidX}" y="${labelY}" text-anchor="middle" font-size="11" font-weight="700" fill="${valColor}" font-family="var(--font)" letter-spacing="1">${fyPt.cash<0?'- ':''}EUR ${K(Math.abs(fyPt.cash))}</text>`;
 
   // Small "FY CLOSE" label
-  const subY=lp.y<zeroY?lp.y-22:lp.y+26;
+  const subY=fyPt.y<zeroY?fyPt.y-22:fyPt.y+26;
   svg+=`<text x="${fyMidX}" y="${subY}" text-anchor="middle" font-size="6" font-weight="700" fill="#A09890" font-family="var(--font)" letter-spacing="2">FY CLOSE</text>`;
 
   svg+=`</svg>`;
@@ -837,14 +840,17 @@ function renderPNL(c,cb){
   let h='<thead><tr><th></th>';
   c.forEach(m=>{const e=EXP===m.month?' exp':'';h+=`<th class="mh${e}" onclick="drill('${m.month}')">${sm(m.month)}</th>`;});
   h+='<th class="th">FY Total</th></tr></thead><tbody>';
+  // FY Total = sum only through last December in the 12-month window
+  const decIdx=c.reduce((last,m,i)=>m.month.endsWith('-12')?i:last,-1);
+  const fyEnd=decIdx>=0?decIdx:c.length-1;
   rows.forEach(r=>{
     h+=`<tr class="${r.cls}"><td>${r.l}</td>`;
     c.forEach((m,i)=>{const val=r.fn(m,i);h+=`<td class="${r.fc?'fc':''}">${v(val,r.fc)}</td>`;});
-    const t=c.reduce((s,m,i)=>s+r.fn(m,i),0);h+=`<td>${v(t,r.fc)}</td></tr>`;
+    const t=c.slice(0,fyEnd+1).reduce((s,m,i)=>s+r.fn(m,i),0);h+=`<td>${v(t,r.fc)}</td></tr>`;
   });
   h+=`<tr class="row-cash"><td>Cash Position</td>`;
   cb.forEach(val=>{h+=`<td class="${val<0?'cell-neg':''}">${EUR(val)}</td>`;});
-  h+=`<td class="${cb[cb.length-1]<0?'cell-neg':''}">${EUR(cb[cb.length-1])}</td></tr>`;
+  h+=`<td class="${cb[fyEnd]<0?'cell-neg':''}">${EUR(cb[fyEnd])}</td></tr>`;
   h+='</tbody>';tbl.innerHTML=h;
 }
 
