@@ -203,7 +203,7 @@ export async function GET(request: Request) {
     try {
       const payables = await Promise.race([
         fetchPayables(),
-        new Promise<never>((_, reject) => setTimeout(() => reject(new Error("AP fetch timeout")), 3000)),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error("AP fetch timeout")), 10000)),
       ]);
       for (const item of payables.items) {
         const dueDate = parseExactDate(item.DueDate);
