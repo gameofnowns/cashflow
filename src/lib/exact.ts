@@ -266,7 +266,7 @@ export async function fetchPayables(): Promise<{ total: number; items: ExactPaya
   const items = await exactGetAll<ExactPayable>(
     "/read/financial/PayablesList?$select=AccountName,Amount,InvoiceNumber,InvoiceDate,DueDate,CurrencyCode"
   );
-  const total = items.reduce((sum, item) => sum + Math.abs(item.Amount || 0), 0);
+  const total = items.reduce((sum, item) => sum + (item.Amount || 0), 0);
   return { total, items };
 }
 

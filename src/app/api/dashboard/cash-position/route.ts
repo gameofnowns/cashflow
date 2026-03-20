@@ -42,6 +42,13 @@ const PHASE_WEIGHTS: Record<string, number> = {
   "3-Propose": 0.90,
 };
 
+/** Shift a month key forward by N months (e.g. "2026-03" +1 → "2026-04") */
+function shiftMonthKey(mk: string, offset: number): string {
+  const [y, m] = mk.split("-").map(Number);
+  const d = new Date(y, m - 1 + offset, 1);
+  return toMonthKey(d);
+}
+
 function phaseFromStepname(stepname: string | null): string {
   if (!stepname) return "unknown";
   if (stepname.includes("1")) return "1-Qualify";
@@ -183,7 +190,11 @@ export async function GET(request: Request) {
           expectedDate: ms.expectedDate.toISOString(),
           status: ms.status,
         });
-        months[mk].cogsWon += calcCOGS(ms.amount, type);
+        // COGS lands 1 month after the AR milestone (payment terms / office lag)
+        const cogsMk = shiftMonthKey(mk, 1);
+        if (months[cogsMk]) {
+          months[cogsMk].cogsWon += calcCOGS(ms.amount, type);
+        }
       }
     }
 
@@ -198,7 +209,7 @@ export async function GET(request: Request) {
         const dueDate = parseExactDate(item.DueDate);
         const mk = bucketMonth(dueDate);
         if (!mk) continue;
-        const amount = Math.abs(item.Amount || 0);
+        const amount = item.Amount || 0;
         months[mk].ap += amount;
         months[mk].apItems.push({
           projectName: item.AccountName || "Unknown vendor",
@@ -207,7 +218,7 @@ export async function GET(request: Request) {
           label: String(item.InvoiceNumber || "—"),
           amount,
           expectedDate: dueDate.toISOString(),
-          status: "payable",
+          status: amount < 0 ? "credit" : "payable",
         });
       }
     } catch (e) {
@@ -304,18 +315,21 @@ export async function GET(request: Request) {
             trigger: ms.trigger,
           };
 
+          // COGS lands 1 month after the AR milestone (payment terms / office lag)
+          const cogsMk = shiftMonthKey(mk, 1);
+
           if (phase === "1-Qualify") {
             months[mk].pipelinePhase1 += ms.amount;
             months[mk].pipelinePhase1Items.push(item);
-            months[mk].cogsPhase1 += calcCOGS(ms.amount, type);
+            if (months[cogsMk]) months[cogsMk].cogsPhase1 += calcCOGS(ms.amount, type);
           } else if (phase === "2-Develop") {
             months[mk].pipelinePhase2 += ms.amount;
             months[mk].pipelinePhase2Items.push(item);
-            months[mk].cogsPhase2 += calcCOGS(ms.amount, type);
+            if (months[cogsMk]) months[cogsMk].cogsPhase2 += calcCOGS(ms.amount, type);
           } else {
             months[mk].pipelinePhase3 += ms.amount;
             months[mk].pipelinePhase3Items.push(item);
-            months[mk].cogsPhase3 += calcCOGS(ms.amount, type);
+            if (months[cogsMk]) months[cogsMk].cogsPhase3 += calcCOGS(ms.amount, type);
           }
         }
       }
