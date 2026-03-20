@@ -15,6 +15,11 @@ export function middleware(request: NextRequest) {
   if (request.nextUrl.pathname.startsWith("/api/debug/")) {
     return NextResponse.next();
   }
+
+  // Skip static HTML files in public/
+  if (request.nextUrl.pathname.endsWith(".html")) {
+    return NextResponse.next();
+  }
   if (request.nextUrl.pathname.startsWith("/quote-alignment")) {
     return NextResponse.next();
   }
