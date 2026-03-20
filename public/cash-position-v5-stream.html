@@ -463,6 +463,10 @@ function renderStream(c,cb){
   el.innerHTML=renderGrid(el,H,zeroY,scale,mA,mB);
   const cols=getColPositions(el,c);
   const RES=96; // 8 samples per month
+  // Compute the actual pixel span of the 12 month columns (excludes FY Total)
+  const chartLeft=cols[0].x-cols[0].w/2;
+  const chartRight=cols[cols.length-1].x+cols[cols.length-1].w/2;
+  const chartSpan=chartRight-chartLeft;
 
   // Generate bell curves for each series per month
   const inflowLayers=[
@@ -508,13 +512,12 @@ function renderStream(c,cb){
   inflowCurves.forEach(layer=>{
     const topEdge=[],botEdge=[];
     for(let i=0;i<RES;i++){
-      const x=(i/RES)*W;
+      const x=chartLeft+(i/RES)*chartSpan;
       const botY=zeroY-inflowBase[i]*scale;
       const topY=zeroY-(inflowBase[i]+layer.curve[i])*scale;
       botEdge.push({x,y:botY});
       topEdge.push({x,y:topY});
     }
-    // Closed area path
     const fwd=smoothPath(topEdge);
     const bwd=smoothPath([...botEdge].reverse());
     const areaD=fwd+` L${botEdge[botEdge.length-1].x.toFixed(1)},${botEdge[botEdge.length-1].y.toFixed(1)} ${bwd.slice(1)} Z`;
@@ -522,13 +525,12 @@ function renderStream(c,cb){
     const rgb=hexToRgb(layer.color);
     svg+=`<path class="stream-band" d="${areaD}" fill="rgba(${rgb},${layer.op})" stroke="rgba(${rgb},${layer.op+0.15})" stroke-width="0.5"/>`;
 
-    // Label at peak
     const peakIdx=layer.curve.indexOf(Math.max(...layer.curve));
     if(peakIdx>=0){
       const peakVal=layer.curve[peakIdx];
       const bandH=peakVal*scale;
       if(bandH>20){
-        const px=(peakIdx/RES)*W;
+        const px=chartLeft+(peakIdx/RES)*chartSpan;
         const py=zeroY-(inflowBase[peakIdx]+peakVal/2)*scale;
         svg+=`<text x="${px}" y="${py}" text-anchor="middle" font-size="7" font-weight="600" fill="rgba(${rgb},0.9)" font-family="var(--font)">${layer.key==='currentAr'?'Current AR':layer.key==='billableAr'?'Billable':layer.key==='committed'?'Committed':'VAT'}</text>`;
         svg+=`<text x="${px}" y="${py+9}" text-anchor="middle" font-size="6" fill="rgba(0,0,0,0.35)" font-family="var(--font)">${K(peakVal)}</text>`;
@@ -543,7 +545,7 @@ function renderStream(c,cb){
   outflowCurves.forEach(layer=>{
     const topEdge=[],botEdge=[];
     for(let i=0;i<RES;i++){
-      const x=(i/RES)*W;
+      const x=chartLeft+(i/RES)*chartSpan;
       const topY=zeroY+outflowBase[i]*scale;
       const botY=zeroY+(outflowBase[i]+layer.curve[i])*scale;
       topEdge.push({x,y:topY});
@@ -561,7 +563,7 @@ function renderStream(c,cb){
       const peakVal=layer.curve[peakIdx];
       const bandH=peakVal*scale;
       if(bandH>20){
-        const px=(peakIdx/RES)*W;
+        const px=chartLeft+(peakIdx/RES)*chartSpan;
         const py=zeroY+(outflowBase[peakIdx]+peakVal/2)*scale;
         svg+=`<text x="${px}" y="${py}" text-anchor="middle" font-size="7" font-weight="600" fill="rgba(${rgb},0.9)" font-family="var(--font)">${layer.key==='ap'?'AP':layer.key==='cogsWon'?'COGS':layer.key==='overhead'?'Overhead':'COGS (P)'}</text>`;
         svg+=`<text x="${px}" y="${py+9}" text-anchor="middle" font-size="6" fill="rgba(0,0,0,0.35)" font-family="var(--font)">${K(peakVal)}</text>`;
@@ -572,8 +574,8 @@ function renderStream(c,cb){
   });
 
   // Today marker
-  const nowFrac=0.03; // ~1 week into first month
-  const todayX=nowFrac*W;
+  const nowFrac=0.03;
+  const todayX=chartLeft+nowFrac*chartSpan;
   svg+=`<line x1="${todayX}" y1="0" x2="${todayX}" y2="${H}" stroke="#FE6337" stroke-width="1" stroke-dasharray="4,3" opacity="0.3"/>`;
   svg+=`<text x="${todayX}" y="10" font-size="6" fill="#FE6337" opacity="0.5" font-family="var(--font)">TODAY</text>`;
 
@@ -597,6 +599,10 @@ function precomputeTooltipFrames(c,cb,inflowCurves,outflowCurves,cols,zeroY,scal
   const bank=D.bankBalance;
   let cash=bank;
   const cashPts=c.map((m,i)=>{cash+=m.net;return{x:cols[i].x,y:zeroY-cash*scale,cash};});
+  // Use same chart span as SVG rendering
+  const cLeft=cols[0].x-cols[0].w/2;
+  const cRight=cols[cols.length-1].x+cols[cols.length-1].w/2;
+  const cSpan=cRight-cLeft;
 
   // Build per-project bell curves for inflows (for tooltip detail)
   // Each project gets its own bell centered on its expected date
@@ -628,7 +634,7 @@ function precomputeTooltipFrames(c,cb,inflowCurves,outflowCurves,cols,zeroY,scal
 
   for(let i=0;i<RES;i++){
     const frac=i/RES;
-    const x=frac*W;
+    const x=cLeft+frac*cSpan;
     const monthIdx=Math.min(11,Math.floor(frac*12));
     const monthName=c[monthIdx]?sm(c[monthIdx].month).split(' ')[0].toUpperCase():'';
     // ISO week number from start of year
@@ -778,7 +784,7 @@ function renderPNL(c,cb){
   ];
   let h='<thead><tr><th></th>';
   c.forEach(m=>{const e=EXP===m.month?' exp':'';h+=`<th class="mh${e}" onclick="drill('${m.month}')">${sm(m.month)}</th>`;});
-  h+='<th class="th">Total</th></tr></thead><tbody>';
+  h+='<th class="th">FY Total</th></tr></thead><tbody>';
   rows.forEach(r=>{
     h+=`<tr class="${r.cls}"><td>${r.l}</td>`;
     c.forEach((m,i)=>{const val=r.fn(m,i);h+=`<td class="${r.fc?'fc':''}">${v(val,r.fc)}</td>`;});
