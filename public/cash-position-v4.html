@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NOWN — Cashflows v4</title>
+<style>
+  :root {
+    --bg:#EAE6DF;--ink:#1A1814;--sub:#6B6560;--dim:#A09890;--ghost:#C8C2B8;
+    --orange:#FE6337;--blue:#0086D5;--green:#82D780;--yellow:#FAE791;
+    --terracotta:#BD6A55;--sage:#8F9A8F;--blue-grey:#D8E1EB;--bronze:#887550;
+    --blush:#F7E5DF;--red:#C0392B;
+    --grid:1px solid #1A1814;
+    --font:'Replica','Helvetica Neue',Arial,sans-serif;
+    --mono:'SF Mono','Fira Code',Consolas,monospace;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:var(--font);background:var(--bg);color:var(--ink);line-height:1.0;}
+
+  /* ─── ROW 1: Logo + Inline Metrics + Sync + Refresh ────── */
+  .r1{display:flex;align-items:center;gap:0;padding:0;border-bottom:var(--grid);}
+  .r1-logo{padding:10px 18px;border-right:var(--grid);display:flex;align-items:center;}
+  .r1-logo svg{height:24px;width:auto;}
+  .r1-metrics{display:flex;align-items:center;gap:0;flex:1;}
+  .r1-m{display:flex;flex-direction:column;align-items:flex-end;padding:8px 16px;border-right:var(--grid);}
+  .r1-m:last-child{border-right:none;}
+  .r1-ml{font-size:7.5px;color:var(--dim);letter-spacing:0.5px;font-family:var(--mono);line-height:1.4;}
+  .r1-mv{font-size:16px;font-weight:700;font-family:var(--mono);letter-spacing:1px;line-height:1.2;}
+  .r1-neg{color:var(--terracotta);}
+  .r1-pos{color:#4a9e5c;}
+  .r1-sep{color:var(--dim);font-weight:400;margin:0 2px;font-size:11px;}
+  .r1-syncs{display:flex;gap:8px;padding:0 12px;font-size:8px;color:var(--dim);font-family:var(--mono);align-items:center;}
+  .r1-sync{display:flex;align-items:center;gap:3px;cursor:pointer;}
+  .r1-sync:hover{color:var(--ink);}
+  .r1-dot{width:5px;height:5px;display:inline-block;}
+  .r1-dot.ok{background:var(--green);}
+  .r1-dot.off{background:var(--terracotta);}
+  .r1-ts{font-size:6.5px;color:var(--ghost);font-family:var(--mono);padding:0 8px;}
+  .r1-btn{font-family:var(--mono);font-size:7px;padding:4px 10px;background:transparent;border:var(--grid);color:var(--dim);cursor:pointer;letter-spacing:0.5px;margin-right:8px;}
+  .r1-btn:hover{border-color:var(--orange);color:var(--orange);}
+
+  /* ─── ROW 2: Presets | Toggles | Balance ───────────────── */
+  .r2{display:flex;align-items:center;gap:6px;padding:8px 18px;border-bottom:var(--grid);flex-wrap:wrap;}
+  .r2-label{font-size:7.5px;font-weight:700;text-transform:uppercase;letter-spacing:2.5px;color:var(--dim);margin-right:4px;}
+  .r2-btn{font-family:var(--font);font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;padding:4px 10px;border:var(--grid);background:transparent;color:var(--ink);cursor:pointer;transition:all 100ms;}
+  .r2-btn.active{background:var(--ink);color:var(--bg);}
+  .r2-btn:hover{background:var(--orange);color:#fff;}
+  .r2-btn .dot{display:inline-block;width:5px;height:5px;margin-right:3px;vertical-align:middle;}
+  .r2-sep{width:1px;height:16px;background:var(--ghost);margin:0 4px;}
+  .r2-pipe{font-size:7px;color:var(--ghost);padding:0 2px;}
+  .r2-bal{display:flex;align-items:center;gap:4px;margin-left:auto;font-size:8px;color:var(--dim);font-family:var(--mono);}
+  .r2-bal input{width:70px;background:transparent;border:var(--grid);padding:2px 5px;font-family:var(--mono);font-size:8px;color:var(--ink);}
+  .r2-bal input:focus{outline:1px solid var(--orange);}
+  .r2-bal button{font-family:var(--mono);font-size:7px;padding:2px 6px;border:var(--grid);background:transparent;color:var(--dim);cursor:pointer;}
+
+  /* ─── TICKER ───────────────────────────────────────────── */
+  .ticker{display:flex;align-items:center;background:var(--ink);border-bottom:var(--grid);height:22px;overflow:hidden;transition:opacity 200ms,height 200ms;}
+  .ticker.faded{opacity:0.3;height:18px;}
+  .ticker-scroll{display:flex;align-items:center;white-space:nowrap;animation:ticker-scroll 50s linear infinite;}
+  .ticker:hover .ticker-scroll{animation-play-state:paused;}
+  @keyframes ticker-scroll{0%{transform:translateX(0);}100%{transform:translateX(-50%);}}
+  .ti{display:flex;align-items:center;gap:4px;padding:0 14px;font-size:7.5px;color:var(--ghost);font-family:var(--mono);letter-spacing:0.3px;cursor:pointer;}
+  .ti:hover{color:#fff;}
+  .ti-dot{width:4px;height:4px;flex-shrink:0;}
+  .ti-dot.critical{background:var(--terracotta);}
+  .ti-dot.warning{background:var(--orange);}
+  .ti-dot.info{background:var(--blue);}
+  .ti-dot.positive{background:var(--green);}
+  .ti-v{font-weight:600;}
+  .ti-v.critical{color:var(--terracotta);}
+  .ti-v.warning{color:var(--orange);}
+  .ti-v.positive{color:var(--green);}
+
+  /* ─── COMMAND LINE ─────────────────────────────────────── */
+  .cmdline{display:flex;align-items:center;padding:5px 14px;border-bottom:var(--grid);}
+  .cmd-prompt{color:var(--orange);font-size:10px;font-family:var(--mono);margin-right:8px;user-select:none;}
+  .cmd-input{flex:1;background:transparent;border:none;font-family:var(--mono);font-size:10px;color:var(--ink);outline:none;}
+  .cmd-input::placeholder{color:var(--ghost);}
+  .cmd-kbd{font-size:7px;color:var(--ghost);background:transparent;padding:2px 5px;border:1px solid var(--ghost);font-family:var(--mono);flex-shrink:0;}
+  .cmd-response{background:var(--ink);border-bottom:var(--grid);max-height:0;overflow:hidden;transition:max-height 300ms ease,padding 300ms ease;}
+  .cmd-response.open{max-height:300px;overflow-y:auto;padding:10px 14px;}
+  .cmd-response pre{font-family:var(--mono);font-size:10px;line-height:1.8;color:#e8e4d9;white-space:pre-wrap;}
+  .cmd-response .tag{font-size:7px;padding:1px 4px;margin-left:6px;font-family:var(--mono);}
+  .cmd-response .tag-exact{background:rgba(0,134,213,0.15);color:var(--blue);}
+  .cmd-response .tag-clickup{background:rgba(130,215,128,0.15);color:var(--green);}
+  .cmd-response .tag-dynamics{background:rgba(254,99,55,0.15);color:var(--orange);}
+  @keyframes blink{0%,100%{opacity:1;}50%{opacity:0;}}
+  .cursor-blink{display:inline-block;width:7px;height:12px;background:var(--orange);animation:blink 1s step-end infinite;vertical-align:middle;margin-left:2px;}
+
+  /* ─── CHART ────────────────────────────────────────────── */
+  .chart-wrap{position:relative;overflow:hidden;transition:height 300ms ease;}
+  .chart-canvas{position:relative;height:380px;margin-left:120px;border-left:var(--grid);border-bottom:var(--grid);}
+  /* No legend — toggle pills serve as legend */
+
+  .y-tick{position:absolute;right:calc(100% + 8px);font-size:7.5px;font-weight:300;color:var(--dim);font-family:var(--mono);letter-spacing:0.5px;transform:translateY(-50%);white-space:nowrap;}
+  .grid-h{position:absolute;left:0;right:0;height:1px;background:var(--ghost);}
+  .zero-line{position:absolute;left:0;right:0;height:1px;background:var(--dim);opacity:0.6;}
+  .bar-seg{min-height:1px;transition:opacity 150ms;cursor:pointer;position:absolute;}
+  .bar-seg:hover{opacity:0.7;}
+  .line-overlay{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;}
+
+  /* ─── TOAST ────────────────────────────────────────────── */
+  .toast{position:absolute;bottom:12px;right:12px;background:var(--bg);border:1px solid var(--orange);padding:8px 12px;font-size:9px;color:var(--sub);max-width:240px;line-height:1.5;font-family:var(--mono);z-index:10;animation:toast-in 300ms ease;display:none;}
+  .toast.show{display:block;}
+  .toast.critical{border-color:var(--terracotta);}
+  .toast strong{color:var(--orange);}
+  .toast.critical strong{color:var(--terracotta);}
+  .toast-action{color:var(--orange);cursor:pointer;margin-top:4px;display:block;font-size:8px;letter-spacing:0.5px;}
+  .toast-action:hover{text-decoration:underline;}
+  .toast-x{position:absolute;top:4px;right:6px;color:var(--ghost);cursor:pointer;font-size:10px;}
+  @keyframes toast-in{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
+
+  /* ─── P&L TABLE with cell fills ────────────────────────── */
+  .pnl-wrap{overflow-x:auto;border-bottom:var(--grid);}
+  .pnl{width:100%;border-collapse:collapse;font-size:10px;table-layout:fixed;min-width:900px;}
+  .pnl th{padding:6px 8px;font-weight:700;font-size:7px;text-transform:uppercase;letter-spacing:2px;line-height:1.4;border-right:var(--grid);border-bottom:var(--grid);text-align:right;white-space:nowrap;}
+  .pnl th:first-child{text-align:left;width:120px;min-width:120px;max-width:120px;position:sticky;left:0;background:var(--bg);z-index:2;}
+  .pnl th.mh{color:var(--bg);background:var(--ink);cursor:pointer;transition:background 150ms;}
+  .pnl th.mh:hover{background:var(--orange);}
+  .pnl th.mh.exp{background:var(--orange);color:var(--ink);}
+  .pnl th.th{color:var(--bg);background:var(--ink);}
+  .pnl td{padding:5px 8px;border-right:var(--grid);font-weight:700;letter-spacing:1px;font-family:var(--mono);text-align:right;font-size:9px;white-space:nowrap;}
+  .pnl td:first-child{text-align:left;font-family:var(--font);letter-spacing:2px;position:sticky;left:0;z-index:1;font-size:10px;}
+  .pnl .ghost{color:var(--ghost);}
+  .pnl .fc{color:var(--terracotta);}
+  /* Cell fills — matched to chart series colors */
+  /* Current AR = #82D780 (green) */
+  .row-car td{background:rgba(130,215,128,0.06);}
+  .row-car td:first-child{background:rgba(130,215,128,0.06);}
+  /* Billable AR = #0086D5 (blue) */
+  .row-bar td{background:rgba(0,134,213,0.06);}
+  .row-bar td:first-child{background:rgba(0,134,213,0.06);}
+  /* Committed = #D8E1EB (blue-grey) */
+  .row-com td{background:rgba(216,225,235,0.12);}
+  .row-com td:first-child{background:rgba(216,225,235,0.12);}
+  /* Total Inflow = blend of inflow colors */
+  .row-in-total td{background:rgba(130,215,128,0.10);border-bottom:var(--grid);}
+  .row-in-total td:first-child{background:rgba(130,215,128,0.10);}
+  /* AP = #C0392B (red) */
+  .row-ap td{background:rgba(192,57,43,0.06);}
+  .row-ap td:first-child{background:rgba(192,57,43,0.06);}
+  /* COGS = #887550 (bronze) */
+  .row-cogs td{background:rgba(136,117,80,0.06);}
+  .row-cogs td:first-child{background:rgba(136,117,80,0.06);}
+  /* VAT Returns = #8F9A8F (sage) */
+  .row-vat td{background:rgba(143,154,143,0.06);}
+  .row-vat td:first-child{background:rgba(143,154,143,0.06);}
+  /* Overhead = #F7E5DF (blush) */
+  .row-oh td{background:rgba(247,229,223,0.15);}
+  .row-oh td:first-child{background:rgba(247,229,223,0.15);}
+  /* Total Outflow = blend of outflow colors */
+  .row-out-total td{background:rgba(192,57,43,0.08);border-bottom:var(--grid);}
+  .row-out-total td:first-child{background:rgba(192,57,43,0.08);}
+  /* Net = orange accent */
+  .row-net td{background:rgba(254,99,55,0.06);border-bottom:var(--grid);}
+  .row-net td:first-child{background:rgba(254,99,55,0.06);}
+  /* Cash Position = strong anchor */
+  .row-cash td{background:rgba(26,24,20,0.06);border-top:2px solid var(--ink);}
+  .row-cash td:first-child{background:var(--ink);color:var(--bg);}
+  .cell-neg{background:var(--ink) !important;color:var(--orange) !important;font-weight:700 !important;}
+  .pnl td:last-child{border-left:1px solid rgba(26,24,20,0.1);}
+
+  /* ─── DETAIL ───────────────────────────────────────────── */
+  .detail{border-bottom:var(--grid);}
+  .detail-hero{display:flex;align-items:center;justify-content:space-between;padding:12px 18px;border-bottom:var(--grid);}
+  .detail-title{font-size:28px;font-weight:700;text-transform:uppercase;letter-spacing:6px;line-height:0.70;}
+  .detail-close{font-family:var(--font);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:2px;padding:8px 16px;background:var(--ink);color:var(--bg);border:none;cursor:pointer;}
+  .detail-close:hover{background:var(--orange);color:#fff;}
+  .detail-sub{padding:8px 18px;font-size:7.5px;font-weight:700;text-transform:uppercase;letter-spacing:3px;color:var(--sub);border-bottom:1px solid var(--ghost);}
+  .dt{width:100%;border-collapse:collapse;font-size:10px;}
+  .dt th{padding:6px 12px;font-weight:700;font-size:7px;text-transform:uppercase;letter-spacing:2.5px;color:var(--bg);background:var(--ink);border-right:1px solid var(--sub);border-bottom:var(--grid);text-align:left;}
+  .dt th:last-child{border-right:none;}
+  .dt th.r{text-align:right;}
+  .dt td{padding:5px 12px;border-right:var(--grid);border-bottom:var(--grid);font-weight:700;color:var(--ink);}
+  .dt td:last-child{border-right:none;}
+  .dt td.r{text-align:right;font-family:var(--mono);}
+  .dt tr:hover td{background:rgba(254,99,55,0.06);}
+  .pay-bar{display:flex;height:10px;border:1px solid var(--ink);width:100%;min-width:60px;}
+  .pay-bar .paid{background:var(--green);height:100%;}
+  .pay-bar .out{background:var(--blue);height:100%;}
+</style>
+</head>
+<body>
+
+<!-- ROW 1 -->
+<div class="r1">
+  <div class="r1-logo">
+    <svg width="164" height="22" viewBox="0 0 328 41" fill="none" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" clip-rule="evenodd" d="M65.4138 0H76.3161V24.2839C76.3161 31.1677 72.3342 37.047 65.8835 39.6833C59.4327 42.3195 52.4042 40.9378 47.4664 36.0712L39.752 28.4617L10.9023 0H26.3185L55.1682 28.4576L65.4096 38.5599V0H65.4138ZM317.098 0H328V24.2839C328 31.1677 324.018 37.047 317.567 39.6833C311.117 42.3195 304.088 40.9378 299.15 36.0712L291.436 28.4617L262.586 0V40.9993H251.684V0H278.002L306.852 28.4576L317.094 38.5599V0H317.098ZM158.077 0H147.175V24.2839C147.175 31.1677 151.157 37.047 157.607 39.6833C164.058 42.3195 171.087 40.9378 176.025 36.0712L183.739 28.4617L186.345 25.8911C186.914 32.0738 190.763 37.2561 196.703 39.6833C203.154 42.3195 210.182 40.9378 215.12 36.0712L222.834 28.4617L251.684 0H236.268L207.418 28.4576L197.177 38.5599V15.2067L212.589 0H197.172L168.323 28.4576L158.081 38.5599V0H158.077ZM133.55 9.40935H89.9408V31.59H133.55V9.40935ZM98.4574 0H125.029C135.724 0 144.448 8.60576 144.448 19.1549V21.8444C144.448 32.3936 135.724 40.9993 125.029 40.9993H98.4574C87.7629 40.9993 79.0386 32.3936 79.0386 21.8444V19.1549C79.0386 8.60576 87.7629 0 98.4574 0ZM0 0H10.9023V40.9993H0V0Z" fill="#1A1814"/></svg>
+  </div>
+  <div class="r1-metrics" id="metrics"></div>
+  <div class="r1-syncs" id="syncs"></div>
+  <span class="r1-ts" id="ts"></span>
+  <button class="r1-btn" onclick="loadAll()">REFRESH</button>
+</div>
+
+<!-- ROW 2 -->
+<div class="r2" id="row2"></div>
+
+<!-- TICKER -->
+<div class="ticker" id="ticker"></div>
+
+<!-- COMMAND LINE -->
+<div class="cmdline">
+  <span class="cmd-prompt">NOWN &gt;</span>
+  <input class="cmd-input" id="cmd" placeholder="ask about cash position, AR, AP, pipeline..." onfocus="tickerFade(true)" onblur="setTimeout(()=>tickerFade(false),200)">
+  <span class="cmd-kbd">⌘K</span>
+</div>
+<div class="cmd-response" id="cmd-resp"></div>
+
+<!-- CHART -->
+<div class="chart-wrap">
+  <div class="chart-canvas" id="chart"></div>
+  <div class="toast" id="toast"></div>
+</div>
+
+<!-- TABLE -->
+<div class="pnl-wrap"><table class="pnl" id="pnl"></table></div>
+
+<!-- DETAIL -->
+<div id="detail" style="display:none"></div>
+
+<script>
+const API=window.location.origin;
+const EUR=(n)=>{if(n==null||isNaN(n))return'—';const a=Math.abs(n);const f=a.toLocaleString('de-DE',{minimumFractionDigits:0,maximumFractionDigits:0});return(n<0?'- ':'')+'EUR '+f;};
+const K=(n)=>{const a=Math.abs(n);const s=n<0?'-':'';if(a>=1e6)return s+(a/1e6).toFixed(1)+'M';if(a>=1e3)return s+Math.round(a/1e3)+'K';return s+Math.round(a);};
+const sm=(mk)=>{const[y,mo]=mk.split('-');return['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(mo)-1]+' '+y.slice(2);};
+
+let D=null,EXP=null;
+let T={currentAr:true,billableAr:true,phase3:true,ap:true,cogsWon:true,cogsPipeline:true,vat:true,overhead:true,weighted:false};
+
+function tog(id){T[id]=!T[id];render();}
+function preset(n){
+  const a=(v)=>{for(const k in T)T[k]=v;T.weighted=false;};
+  if(n==='c'){a(true);T.phase3=false;T.cogsPipeline=false;}
+  else if(n==='l')a(true);
+  else if(n==='f')a(true);
+  else if(n==='w'){a(true);T.weighted=true;}
+  render();
+}
+
+function compute(){
+  if(!D)return[];
+  const w=T.weighted;
+  return D.months.map(m=>{
+    const cAr=T.currentAr?m.currentAr:0,bAr=T.billableAr?m.billableAr:0;
+    const p3=T.phase3?(w?m.pipelinePhase3*0.9:m.pipelinePhase3):0;
+    const vat=T.vat?m.vatReturn:0,ap=T.ap?(m.ap||0):0;
+    const cW=T.cogsWon?m.cogsWon:0;
+    let cP=0;if(T.cogsPipeline&&T.phase3)cP=w?m.cogsPhase3*0.9:m.cogsPhase3;
+    const oh=T.overhead?m.overhead:0;
+    const inf=cAr+bAr+p3+vat,out=ap+cW+cP+oh;
+    return{month:m.month,currentAr:cAr,billableAr:bAr,committed:p3,ap,cogsWon:cW,cogsPipeline:cP,vat,overhead:oh,inflow:inf,outflow:out,net:inf-out,_:m};
+  });
+}
+
+function render(){
+  if(!D)return;
+  const c=compute();
+  let cash=D.bankBalance;const cb=c.map(m=>{cash+=m.net;return cash;});
+  const tIn=c.reduce((s,m)=>s+m.inflow,0),tOut=c.reduce((s,m)=>s+m.outflow,0);
+  const m3=c.slice(0,3).reduce((s,m)=>s+m.net,0);
+  const end=D.bankBalance+c.reduce((s,m)=>s+m.net,0);
+  const bank=D.bankBalance;
+
+  // Row 1 metrics
+  document.getElementById('metrics').innerHTML=`
+    <div class="r1-m"><span class="r1-ml">OPENING</span><span class="r1-mv">${K(bank)}</span></div>
+    <div class="r1-m"><span class="r1-ml">3M</span><span class="r1-mv ${bank+m3<0?'r1-neg':''}">${K(bank+m3)}</span></div>
+    <div class="r1-m"><span class="r1-ml">12M</span><span class="r1-mv ${end<0?'r1-neg':''}">${K(end)}</span></div>
+    <div class="r1-m"><span class="r1-ml">IN / OUT</span><span class="r1-mv"><span class="r1-pos">${K(tIn)}</span><span class="r1-sep">/</span><span class="r1-neg">${K(tOut)}</span></span></div>
+    <div class="r1-m"><span class="r1-ml">NET</span><span class="r1-mv ${tIn-tOut<0?'r1-neg':'r1-pos'}">${K(tIn-tOut)}</span></div>
+  `;
+
+  // Row 2
+  const tb=(id,label,color,active)=>`<button class="r2-btn ${active?'active':''}" onclick="tog('${id}')">${color?`<span class="dot" style="background:${color}"></span>`:''}${label}</button>`;
+  document.getElementById('row2').innerHTML=`
+    <span class="r2-label">Presets</span>
+    <button class="r2-btn" onclick="preset('c')">Conserv.</button>
+    <button class="r2-btn" onclick="preset('l')">Likely</button>
+    <button class="r2-btn" onclick="preset('f')">Full</button>
+    <button class="r2-btn" onclick="preset('w')">Weighted</button>
+    <div class="r2-sep"></div>
+    ${tb('currentAr','AR','#82D780',T.currentAr)}
+    ${tb('billableAr','Billable','#0086D5',T.billableAr)}
+    ${tb('phase3','Commit','#D8E1EB',T.phase3)}
+    <span class="r2-pipe">|</span>
+    ${tb('ap','AP','#C0392B',T.ap)}
+    ${tb('cogsWon','COGS','#887550',T.cogsWon)}
+    ${tb('overhead','OH','#F7E5DF',T.overhead)}
+    ${tb('vat','VAT','#8F9A8F',T.vat)}
+    <div class="r2-sep"></div>
+    ${tb('weighted','Weighted','',T.weighted)}
+    <div class="r2-bal"><span>BAL</span><input id="bank-input" value="${Math.round(bank)}" onkeydown="if(event.key==='Enter')loadAll()"><button onclick="loadAll()">SET</button></div>
+  `;
+
+  // Ticker
+  renderTicker(c,cb);
+
+  // Chart
+  renderChart(c,cb);
+
+  // Table
+  renderPNL(c,cb);
+
+  // Toast
+  renderToast(c,cb);
+}
+
+function renderTicker(c,cb){
+  const items=[];
+  // Overdue AR
+  const overdueItems=(D.months[0]?.currentArItems||[]);
+  if(overdueItems.length>0){
+    const tot=overdueItems.reduce((s,i)=>s+i.amount,0);
+    items.push({sev:'critical',label:'OVERDUE',val:`${overdueItems.length} inv / EUR ${K(tot)}`});
+  }
+  // Cash runway
+  const negIdx=cb.findIndex(v=>v<0);
+  const runway=negIdx>=0?negIdx:12;
+  items.push({sev:runway>6?'positive':runway>3?'info':'warning',label:'RUNWAY',val:`${runway} months`});
+  // AP due
+  const apTotal=c.reduce((s,m)=>s+m.ap,0);
+  if(apTotal>0)items.push({sev:'info',label:'AP TOTAL',val:`EUR ${K(apTotal)}`});
+  // Committed pipeline
+  const p3Total=c.reduce((s,m)=>s+m.committed,0);
+  if(p3Total>0)items.push({sev:'info',label:'PIPELINE P3',val:`EUR ${K(p3Total)} committed`});
+  // Concentration
+  const tIn=c.reduce((s,m)=>s+m.inflow,0);
+  c.forEach(m=>{if(m.inflow>tIn*0.3&&m.inflow>200000)items.push({sev:'warning',label:sm(m.month).toUpperCase(),val:`EUR ${K(m.inflow)} concentration`});});
+
+  const html=items.map(i=>`<div class="ti"><span class="ti-dot ${i.sev}"></span>${i.label} <span class="ti-v ${i.sev}">${i.val}</span></div>`).join('<span style="color:#6B6560;font-size:7px;padding:0 4px">·</span>');
+  document.getElementById('ticker').innerHTML=`<div class="ticker-scroll">${html}${html}</div>`;
+}
+
+function tickerFade(on){document.getElementById('ticker').classList.toggle('faded',on);}
+
+function renderChart(c,cb){
+  const el=document.getElementById('chart');el.innerHTML='';
+  const H=380,W=el.offsetWidth||800,bank=D.bankBalance;
+  let maxUp=0,maxDown=0;c.forEach(m=>{maxUp=Math.max(maxUp,m.inflow);maxDown=Math.max(maxDown,m.outflow);});
+  let cashMax=bank,cashMin=bank,cash=bank;c.forEach(m=>{cash+=m.net;cashMax=Math.max(cashMax,cash);cashMin=Math.min(cashMin,cash);});
+  const above=Math.max(maxUp,cashMax,0)*1.1,below=Math.max(maxDown,cashMin<0?Math.abs(cashMin):0)*1.1;
+  const mA=Math.max(above,(above+below)*0.15),mB=Math.max(below,(above+below)*0.15);
+  const range=mA+mB||1,zeroY=(mA/range)*H,scale=H/range;
+
+  const mt=Math.max(mA,mB),raw=mt/5,mag=Math.pow(10,Math.floor(Math.log10(raw||1)));
+  const ns=[1,2,5,10].map(m=>m*mag).find(s=>mt/s<=6)||mag*10;
+  for(let v=ns;v<=mA;v+=ns){const y=zeroY-v*scale;if(y<5)break;el.innerHTML+=`<div class="y-tick" style="top:${y}px">${K(v)}</div><div class="grid-h" style="top:${y}px"></div>`;}
+  for(let v=ns;v<=mB;v+=ns){const y=zeroY+v*scale;if(y>H-5)break;el.innerHTML+=`<div class="y-tick" style="top:${y}px">${K(-v)}</div><div class="grid-h" style="top:${y}px"></div>`;}
+  el.innerHTML+=`<div class="zero-line" style="top:${zeroY}px"></div><div class="y-tick" style="top:${zeroY}px;font-weight:700">0</div>`;
+
+  // Read table columns
+  const tbl=document.getElementById('pnl'),ths=tbl?tbl.querySelectorAll('thead th'):[],cr=el.getBoundingClientRect();
+  const n=c.length,cols=[];
+  if(ths.length>=n+1){for(let i=1;i<=n;i++){const r=ths[i].getBoundingClientRect();cols.push({x:r.left+r.width/2-cr.left,w:r.width});}}
+  else{const s=W/(n+1);for(let i=0;i<n;i++)cols.push({x:(i+0.5)*s,w:s});}
+  const bw=Math.min(36,(cols[0]?.w||60)-8);
+
+  c.forEach((m,i)=>{
+    const x=cols[i].x;
+    [{v:m.currentAr,c:'#82D780'},{v:m.billableAr,c:'#0086D5'},{v:m.committed,c:'#D8E1EB'},{v:m.vat,c:'#8F9A8F'}].filter(p=>p.v>0).reduce((cum,p)=>{
+      const h=p.v*scale;el.innerHTML+=`<div class="bar-seg" style="left:${x-bw/2}px;top:${zeroY-cum-h}px;width:${bw}px;height:${h}px;background:${p.c};border:1px solid var(--ink)" title="${EUR(p.v)}"></div>`;return cum+h;},0);
+    [{v:m.ap,c:'#C0392B'},{v:m.cogsWon,c:'#887550'},{v:m.cogsPipeline,c:'#BD6A55'},{v:m.overhead,c:'#F7E5DF'}].filter(p=>p.v>0).reduce((cum,p)=>{
+      const h=p.v*scale;el.innerHTML+=`<div class="bar-seg" style="left:${x-bw/2}px;top:${zeroY+cum}px;width:${bw}px;height:${h}px;background:${p.c};border:1px solid var(--ink)" title="${EUR(-p.v)}"></div>`;return cum+h;},0);
+  });
+
+  cash=bank;const pts=c.map((m,i)=>{cash+=m.net;return{x:cols[i].x,y:zeroY-cash*scale,cash};});
+  const sy=zeroY-bank*scale,sx=cols[0].x-cols[0].w/2;
+  let d=`M ${sx} ${sy}`;pts.forEach(p=>{d+=` L ${p.x} ${p.y}`;});
+  let svg=`<svg class="line-overlay" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"><path d="${d}" fill="none" stroke="#1A1814" stroke-width="3.5"/>`;
+  pts.forEach(p=>{svg+=`<circle cx="${p.x}" cy="${p.y}" r="5" fill="#1A1814" stroke="#EAE6DF" stroke-width="2"/>`;});
+  svg+=`</svg>`;el.innerHTML+=svg;
+  el.innerHTML+=`<div style="position:absolute;left:${sx-4}px;top:${sy-14}px;font-size:8px;font-weight:700;font-family:var(--mono);letter-spacing:1px">${K(bank)}</div>`;
+  const lp=pts[pts.length-1];
+  el.innerHTML+=`<div style="position:absolute;left:${lp.x+6}px;top:${lp.y-6}px;font-size:8px;font-weight:700;font-family:var(--mono);letter-spacing:1px">${K(lp.cash)}</div>`;
+}
+
+function renderPNL(c,cb){
+  const tbl=document.getElementById('pnl');
+  const v=(n,fc)=>n>0?`<span class="${fc?'fc':''}">${EUR(n)}</span>`:(n<0?EUR(n):'<span class="ghost">—</span>');
+  const rows=[
+    {l:'Current AR',fn:m=>m.currentAr,cls:'row-car'},
+    {l:'Billable AR',fn:m=>m.billableAr,cls:'row-bar'},
+    {l:'Committed',fn:m=>m.committed,cls:'row-com',fc:true},
+    {l:'Total Inflow',fn:m=>m.inflow,cls:'row-in-total'},
+    {l:'AP',fn:m=>-m.ap,cls:'row-ap'},
+    {l:'COGS',fn:m=>-(m.cogsWon+m.cogsPipeline),cls:'row-cogs'},
+    {l:'VAT Returns',fn:m=>m.vat,cls:'row-vat'},
+    {l:'Overhead',fn:m=>-m.overhead,cls:'row-oh'},
+    {l:'Total Outflow',fn:m=>-m.outflow,cls:'row-out-total'},
+    {l:'Net',fn:(m,i)=>m.net,cls:'row-net'},
+  ];
+
+  let h='<thead><tr><th></th>';
+  c.forEach(m=>{const e=EXP===m.month?' exp':'';h+=`<th class="mh${e}" onclick="drill('${m.month}')">${sm(m.month)}</th>`;});
+  h+='<th class="th">Total</th></tr></thead><tbody>';
+  rows.forEach(r=>{
+    h+=`<tr class="${r.cls}"><td>${r.l}</td>`;
+    c.forEach((m,i)=>{const val=r.fn(m,i);h+=`<td class="${r.fc?'fc':''}">${v(val,r.fc)}</td>`;});
+    const t=c.reduce((s,m,i)=>s+r.fn(m,i),0);h+=`<td>${v(t,r.fc)}</td></tr>`;
+  });
+  // Cash position row
+  h+=`<tr class="row-cash"><td>Cash Position</td>`;
+  cb.forEach(val=>{h+=`<td class="${val<0?'cell-neg':''}">${EUR(val)}</td>`;});
+  h+=`<td class="${cb[cb.length-1]<0?'cell-neg':''}">${EUR(cb[cb.length-1])}</td></tr>`;
+  h+='</tbody>';tbl.innerHTML=h;
+}
+
+function renderToast(c,cb){
+  const el=document.getElementById('toast');
+  const negIdx=cb.findIndex(v=>v<0);
+  if(negIdx>=0&&negIdx<3){
+    el.className='toast show critical';
+    el.innerHTML=`<span class="toast-x" onclick="this.parentElement.classList.remove('show')">✕</span><strong>Cash goes negative in ${sm(c[negIdx].month)}</strong><br>Projected: ${EUR(cb[negIdx])}<div class="toast-action" onclick="document.getElementById('cmd').value='why is ${sm(c[negIdx].month).toLowerCase()} negative';document.getElementById('cmd').focus()">INVESTIGATE →</div>`;
+  } else {
+    el.classList.remove('show');
+  }
+}
+
+function drill(mk){
+  const panel=document.getElementById('detail');
+  if(EXP===mk){EXP=null;panel.style.display='none';render();return;}
+  EXP=mk;
+  const m=D.months.find(m=>m.month===mk);if(!m){render();return;}
+  const tot=(items)=>items.reduce((s,i)=>s+i.amount,0);
+  const pb=(pct)=>`<div class="pay-bar"><div class="paid" style="width:${pct}%"></div><div class="out" style="width:${100-pct}%"></div></div>`;
+  const fd=(iso)=>new Date(iso).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'2-digit'});
+
+  let h=`<div class="detail"><div class="detail-hero"><div class="detail-title">${sm(mk)} BREAKDOWN</div><button class="detail-close" onclick="drill('${mk}')">Close</button></div>`;
+
+  if(m.currentArItems?.length>0){
+    h+=`<div class="detail-sub">Current AR — ${m.currentArItems.length} invoices · ${EUR(tot(m.currentArItems))}</div>`;
+    h+=`<table class="dt"><thead><tr><th>Customer</th><th>Invoice</th><th>Job No.</th><th>Due Date</th><th>Status</th><th class="r">Amount</th></tr></thead><tbody>`;
+    m.currentArItems.forEach(i=>{h+=`<tr><td>${i.projectName}</td><td>${i.label}</td><td>${i.jobNo||'—'}</td><td>${fd(i.expectedDate)}</td><td>${i.status}</td><td class="r">${EUR(i.amount)}</td></tr>`;});
+    h+='</tbody></table>';
+  }
+  if(m.billableArItems?.length>0){
+    h+=`<div class="detail-sub">Billable AR — ${m.billableArItems.length} milestones · ${EUR(tot(m.billableArItems))}</div>`;
+    h+=`<table class="dt"><thead><tr><th>Project</th><th>Type</th><th>Job No.</th><th>Milestone</th><th>Status</th><th style="width:80px">Progress</th><th class="r">Amount</th></tr></thead><tbody>`;
+    m.billableArItems.forEach(i=>{const pct=i.status==='received'?100:i.status==='invoiced'?50:0;h+=`<tr><td>${i.projectName}</td><td>${i.projectType}</td><td>${i.jobNo||'—'}</td><td>${i.label||'—'}</td><td>${i.status}</td><td>${pb(pct)}</td><td class="r">${EUR(i.amount)}</td></tr>`;});
+    h+='</tbody></table>';
+  }
+  if(m.pipelinePhase3Items?.length>0){
+    h+=`<div class="detail-sub">Committed Pipeline — ${m.pipelinePhase3Items.length} milestones · ${EUR(tot(m.pipelinePhase3Items))}</div>`;
+    h+=`<table class="dt"><thead><tr><th>Opportunity</th><th>Type</th><th>Job No.</th><th>Milestone</th><th>Trigger</th><th style="width:80px">Progress</th><th class="r">Amount</th></tr></thead><tbody>`;
+    m.pipelinePhase3Items.forEach(i=>{h+=`<tr><td>${i.projectName}</td><td>${i.projectType}</td><td>${i.jobNo||'—'}</td><td>${i.label||'—'}</td><td>${i.trigger||'—'}</td><td>${pb(0)}</td><td class="r">${EUR(i.amount)}</td></tr>`;});
+    h+='</tbody></table>';
+  }
+  if(m.apItems?.length>0){
+    h+=`<div class="detail-sub">Accounts Payable — ${m.apItems.length} items · ${EUR(tot(m.apItems))}</div>`;
+    h+=`<table class="dt"><thead><tr><th>Vendor</th><th>Invoice</th><th>Due Date</th><th class="r">Amount</th></tr></thead><tbody>`;
+    m.apItems.forEach(i=>{h+=`<tr><td>${i.projectName}</td><td>${i.label}</td><td>${fd(i.expectedDate)}</td><td class="r">${EUR(i.amount)}</td></tr>`;});
+    h+='</tbody></table>';
+  }
+  h+='</div>';
+  panel.innerHTML=h;panel.style.display='block';
+  panel.scrollIntoView({behavior:'smooth',block:'start'});
+  render();
+}
+
+// ─── Command line ───────────────────────────────────────────
+document.getElementById('cmd').addEventListener('keydown',async(e)=>{
+  if(e.key!=='Enter')return;
+  const input=e.target.value.trim();if(!input)return;
+  const resp=document.getElementById('cmd-resp');
+  resp.classList.add('open');
+  resp.innerHTML='<pre style="color:#d4a843">processing...</pre>';
+  try{
+    const res=await fetch(`${API}/api/chat`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:[{role:'user',content:input}],context:{bankBalance:D?.bankBalance,months:compute().map((m,i)=>({...m,cashPosition:compute().length?[D.bankBalance,...compute().map(m=>m.net)].reduce((a,b,j)=>j<=i+1?a+b:a,0):0}))}})});
+    const data=await res.json();
+    if(data.error){resp.innerHTML=`<pre style="color:#BD6A55">error: ${data.error}</pre>`;return;}
+    const tags=(data.sources||[]).map(s=>`<span class="tag tag-${s}">${s.toUpperCase()}</span>`).join('');
+    resp.innerHTML=`<pre>${data.message}</pre>${tags?'<div style="margin-top:8px">'+tags+'</div>':''}`;
+  }catch(err){resp.innerHTML=`<pre style="color:#BD6A55">error: ${err.message}</pre>`;}
+});
+
+// ─── Keyboard shortcuts ─────────────────────────────────────
+window.addEventListener('keydown',(e)=>{
+  if((e.metaKey||e.ctrlKey)&&e.key==='k'){e.preventDefault();document.getElementById('cmd').focus();}
+  if(e.key==='Escape'){document.getElementById('cmd-resp').classList.remove('open');document.getElementById('cmd').blur();tickerFade(false);}
+  if(e.key==='/'&&e.target.tagName!=='INPUT'){e.preventDefault();document.getElementById('cmd').focus();}
+});
+
+// ─── Data loading ───────────────────────────────────────────
+async function loadAll(){
+  document.getElementById('ts').textContent=new Date().toLocaleString('nl-NL').toLowerCase();
+  const bv=document.getElementById('bank-input')?.value?.trim()||'';
+  const params=bv?`?bankBalance=${encodeURIComponent(bv)}`:'';
+  try{
+    const[dataRes,statusRes]=await Promise.all([fetch(`${API}/api/dashboard/cash-position${params}`),fetch(`${API}/api/dashboard/status`)]);
+    const data=await dataRes.json();if(data.error)throw new Error(data.error);
+    D=data;
+    if(!bv&&D.bankBalance>0){const inp=document.getElementById('bank-input');if(inp)inp.value=Math.round(D.bankBalance);}
+    try{
+      const s=await statusRes.json();
+      const el=document.getElementById('syncs');
+      const dOk=s.dynamics?.connected&&s.dynamics?.tokenValid;
+      const cOk=s.clickup?.connected&&(s.clickup?.projectsSynced||0)>0;
+      const eOk=s.exact?.connected&&s.exact?.tokenValid;
+      el.innerHTML=`<span class="r1-sync" onclick="runSync('dynamics')"><span class="r1-dot ${dOk?'ok':'off'}"></span>DYN</span><span class="r1-sync" onclick="runSync('clickup')"><span class="r1-dot ${cOk?'ok':'off'}"></span>CU</span><span class="r1-sync" onclick="runSync('exact')"><span class="r1-dot ${eOk?'ok':'off'}"></span>EX</span>`;
+    }catch{}
+    render();
+  }catch(e){document.getElementById('metrics').innerHTML=`<div class="r1-m"><span class="r1-ml">ERROR</span><span class="r1-mv r1-neg">${e.message}</span></div>`;}
+}
+
+async function runSync(p){
+  try{await fetch(`${API}/api/sync/${p}`,{method:'POST'});setTimeout(loadAll,500);}catch{}
+}
+
+loadAll();
+</script>
+</body>
+</html>
