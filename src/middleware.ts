@@ -6,42 +6,41 @@ export function middleware(request: NextRequest) {
   // Skip if no password is set
   if (!AUTH_PASSWORD) return NextResponse.next();
 
+  const path = request.nextUrl.pathname;
+
+  // Skip static HTML files
+  if (path.endsWith(".html")) return NextResponse.next();
+
   // Skip auth callback routes (OAuth redirects)
-  if (request.nextUrl.pathname.startsWith("/api/auth/")) {
-    return NextResponse.next();
-  }
+  if (path.startsWith("/api/auth/")) return NextResponse.next();
 
-  // Skip debug endpoints and pages
-  if (request.nextUrl.pathname.startsWith("/api/debug/")) {
-    return NextResponse.next();
-  }
+  // Skip debug endpoints
+  if (path.startsWith("/api/debug/")) return NextResponse.next();
 
-  // Skip static HTML files in public/
-  if (request.nextUrl.pathname.endsWith(".html")) {
-    return NextResponse.next();
-  }
-  if (request.nextUrl.pathname.startsWith("/quote-alignment")) {
-    return NextResponse.next();
-  }
+  // Skip dashboard API endpoints (used by static HTML dashboards)
+  if (path.startsWith("/api/dashboard/")) return NextResponse.next();
 
-  // Skip webhook endpoints that use their own auth
-  if (request.nextUrl.pathname === "/api/sync/dynamics" && request.method === "POST") {
-    return NextResponse.next();
-  }
+  // Skip chat API
+  if (path.startsWith("/api/chat")) return NextResponse.next();
+
+  // Skip sync endpoints
+  if (path.startsWith("/api/sync/")) return NextResponse.next();
+
+  // Skip other API endpoints
+  if (path.startsWith("/api/")) return NextResponse.next();
+
+  // Skip quote alignment page
+  if (path.startsWith("/quote-alignment")) return NextResponse.next();
 
   // Check for auth cookie
   const authCookie = request.cookies.get("app_auth")?.value;
-  if (authCookie === AUTH_PASSWORD) {
-    return NextResponse.next();
-  }
+  if (authCookie === AUTH_PASSWORD) return NextResponse.next();
 
   // Check for login form submission
-  if (request.nextUrl.pathname === "/api/login" && request.method === "POST") {
-    return NextResponse.next();
-  }
+  if (path === "/api/login" && request.method === "POST") return NextResponse.next();
 
-  // Show login page for all other requests
-  if (request.nextUrl.pathname !== "/login") {
+  // Redirect to login for all other page requests
+  if (path !== "/login") {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
@@ -49,5 +48,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|login|.*\\.html$).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 };
