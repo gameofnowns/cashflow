@@ -190,7 +190,10 @@ export async function GET(request: Request) {
     // ─── AP: Accounts Payable (Exact) ─────────────────────
 
     try {
-      const payables = await fetchPayables();
+      const payables = await Promise.race([
+        fetchPayables(),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error("AP fetch timeout")), 3000)),
+      ]);
       for (const item of payables.items) {
         const dueDate = parseExactDate(item.DueDate);
         const mk = bucketMonth(dueDate);
