@@ -16,6 +16,7 @@
     "seed": "npx tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.80.0",
     "@prisma/client": "^6.19.2",
     "next": "16.1.7",
     "node-tesseract-ocr": "^2.2.1",
