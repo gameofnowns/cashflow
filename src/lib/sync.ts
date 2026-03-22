@@ -1,89 +1,236 @@
 import { prisma } from "./db";
 import { fetchActiveTasks, parseTask, type ParsedProject } from "./clickup";
-import type { ProjectType } from "./types";
+import {
+  getToken,
+  dynamicsFetch,
+  decodeQuote,
+  extractPaymentTermsFromLineItems,
+  addWeeks,
+  QUOTE_SELECT_FIELDS,
+  type ComputedMilestone,
+} from "./dynamics-quotes";
 
 export interface SyncResult {
   total: number;
   synced: number;
   skipped: number;
   errors: string[];
+  dynamicsEnriched?: number;
 }
 
-/** Add weeks to a date */
-function addWeeks(date: Date, weeks: number): Date {
-  return new Date(date.getTime() + weeks * 7 * 24 * 60 * 60 * 1000);
+// ─── Dynamics Batch Fetch ─────────────────────────────────────
+
+interface DynamicsQuoteData {
+  opp: {
+    opportunityid: string;
+    name: string;
+    estimatedvalue?: number;
+    actualclosedate?: string;
+    estimatedclosedate?: string;
+  };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  quote: Record<string, any> | null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  lineItems: Record<string, any>[] | null;
 }
 
 /**
- * Estimate when a payment will land based on real project data.
- * Uses the dependency chain: Prod. ETA → Approved Shops + production → quote + leadtime → fallback.
+ * Batch-fetch all Dynamics closed-won opportunities with their quotes
+ * and (when needed) quote line items. Returns a Map keyed by job number.
+ *
+ * Wrapped in a timeout + try/catch so ClickUp sync continues if Dynamics is down.
+ */
+async function fetchDynamicsQuoteMap(): Promise<Map<string, DynamicsQuoteData>> {
+  const map = new Map<string, DynamicsQuoteData>();
+
+  const token = await getToken();
+
+  // Fetch all Won opportunities (statecode=1 means Won)
+  const oppsResp = await dynamicsFetch(
+    `/opportunities?$filter=statecode eq 1&$select=opportunityid,name,estimatedvalue,actualclosedate,estimatedclosedate&$top=500`,
+    token
+  );
+  const opps = oppsResp.value || [];
+
+  // For each opp, extract job number and fetch the Won quote
+  // Process in batches of 5 to avoid hammering the API
+  const BATCH_SIZE = 5;
+  for (let i = 0; i < opps.length; i += BATCH_SIZE) {
+    const batch = opps.slice(i, i + BATCH_SIZE);
+    const results = await Promise.allSettled(
+      batch.map(async (opp: Record<string, string>) => {
+        // Extract job number from opportunity name
+        const jobMatch = opp.name?.match(/(\d{2}-[XYZ]\d{3,4})/);
+        if (!jobMatch) return null;
+        const jobNo = jobMatch[1];
+
+        // Fetch Won quote (statecode=1 for Won, then 2 for Closed)
+        let quote = null;
+        for (const statecode of [1, 2]) {
+          const qResp = await dynamicsFetch(
+            `/quotes?$filter=_opportunityid_value eq '${opp.opportunityid}' and statecode eq ${statecode}&$top=1&$orderby=createdon desc&$select=${QUOTE_SELECT_FIELDS}`,
+            token
+          );
+          if (qResp.value?.[0]) {
+            quote = qResp.value[0];
+            break;
+          }
+        }
+
+        // Conditionally fetch line items if terms need resolution
+        let lineItems = null;
+        if (quote) {
+          const hasStandardTerms = quote.paymenttermscode != null;
+          const manual = (quote.nown_manualentrypaymentterms || "").trim();
+          const manualHasTerms = manual && !manual.toLowerCase().includes("see line") && /\d+%/.test(manual);
+
+          if (!hasStandardTerms && !manualHasTerms) {
+            // Need to check line items
+            try {
+              const liResp = await dynamicsFetch(
+                `/quotedetails?$filter=_quoteid_value eq '${quote.quoteid}'&$select=quotedetailname,productdescription,description,baseamount&$top=50`,
+                token
+              );
+              lineItems = liResp.value || null;
+            } catch {
+              // Line item fetch failed — proceed without
+            }
+          }
+        }
+
+        return { jobNo, opp, quote, lineItems };
+      })
+    );
+
+    for (const result of results) {
+      if (result.status === "fulfilled" && result.value) {
+        const { jobNo, opp, quote, lineItems } = result.value;
+        map.set(jobNo, { opp, quote, lineItems });
+      }
+    }
+  }
+
+  return map;
+}
+
+// ─── Trigger-Based Date Estimation ────────────────────────────
+
+/**
+ * Estimate when a payment milestone will land based on the payment trigger
+ * (from Dynamics) and real project timing (from ClickUp).
+ *
+ * Dynamics tells us WHAT the trigger is (start, approval, pre-ship, NET 30).
+ * ClickUp tells us WHERE the project is (status, timing fields).
+ *
+ * Trigger → ClickUp field mapping:
+ *   start/deposit    → quoteDate + 1 week
+ *   shops            → dueDateShops, or quoteDate + designWeeks
+ *   approval         → approvedShopsDate, or dueDateShops + 2wk buffer
+ *   mid-manufacture  → midpoint between approval and pre-ship estimates
+ *   pre-ship         → productionEta, or approvedShops + productionWeeks
+ *   NET 30           → pre-ship estimate + 4 weeks
+ *   NET 60           → pre-ship estimate + 9 weeks
+ */
+function estimateMilestoneDate(
+  trigger: string,
+  project: ParsedProject,
+  dynamicsDesignWeeks?: number | null,
+  dynamicsMfgWeeks?: number | null
+): Date {
+  const now = new Date();
+  const designWeeks = dynamicsDesignWeeks ?? Math.round((project.leadtimeWeeks || 12) * 0.4);
+  const mfgWeeks = dynamicsMfgWeeks ?? Math.round((project.leadtimeWeeks || 12) * 0.6);
+  const productionWeeks = project.leadtimeWeeks
+    ? Math.round(project.leadtimeWeeks * 0.6)
+    : mfgWeeks;
+
+  switch (trigger) {
+    case "start": {
+      // Deposit / 1st payment: ~1 week after quote signing
+      if (project.quoteDate) return addWeeks(project.quoteDate, 1);
+      return new Date(now.getFullYear(), now.getMonth() + 1, 15);
+    }
+
+    case "shops": {
+      // Design complete → shops delivered
+      if (project.dueDateShops) return project.dueDateShops;
+      if (project.quoteDate) return addWeeks(project.quoteDate, designWeeks);
+      return new Date(now.getFullYear(), now.getMonth() + 2, 15);
+    }
+
+    case "approval": {
+      // Client approves shop drawings
+      if (project.approvedShopsDate) return addWeeks(project.approvedShopsDate, 0);
+      if (project.dueDateShops) return addWeeks(project.dueDateShops, 2); // 2wk approval buffer
+      if (project.quoteDate) return addWeeks(project.quoteDate, designWeeks + 2);
+      return new Date(now.getFullYear(), now.getMonth() + 2, 15);
+    }
+
+    case "mid-manufacture": {
+      // Midpoint of production
+      const approvalDate = project.approvedShopsDate
+        || (project.dueDateShops ? addWeeks(project.dueDateShops, 2) : null)
+        || (project.quoteDate ? addWeeks(project.quoteDate, designWeeks + 2) : null);
+      if (approvalDate) return addWeeks(approvalDate, Math.ceil(productionWeeks / 2));
+      return new Date(now.getFullYear(), now.getMonth() + 3, 15);
+    }
+
+    case "pre-ship": {
+      // Production complete, ready to ship
+      if (project.productionEta) return project.productionEta;
+      if (project.approvedShopsDate) return addWeeks(project.approvedShopsDate, productionWeeks);
+      if (project.dueDateShops) return addWeeks(project.dueDateShops, 2 + productionWeeks);
+      if (project.quoteDate && project.leadtimeWeeks) return addWeeks(project.quoteDate, project.leadtimeWeeks);
+      if (project.quoteDate) return addWeeks(project.quoteDate, designWeeks + mfgWeeks);
+      return new Date(now.getFullYear(), now.getMonth() + 4, 15);
+    }
+
+    case "NET 30": {
+      // 30 days after dispatch (pre-ship + ~4 weeks)
+      const preShipDate = estimateMilestoneDate("pre-ship", project, dynamicsDesignWeeks, dynamicsMfgWeeks);
+      return addWeeks(preShipDate, 4);
+    }
+
+    case "NET 60": {
+      // 60 days after dispatch (pre-ship + ~9 weeks)
+      const preShipDate = estimateMilestoneDate("pre-ship", project, dynamicsDesignWeeks, dynamicsMfgWeeks);
+      return addWeeks(preShipDate, 9);
+    }
+
+    default: {
+      // Unknown trigger — estimate midpoint of total lead time
+      if (project.quoteDate && project.leadtimeWeeks) {
+        return addWeeks(project.quoteDate, Math.ceil(project.leadtimeWeeks / 2));
+      }
+      return new Date(now.getFullYear(), now.getMonth() + 3, 15);
+    }
+  }
+}
+
+/**
+ * Legacy date estimator — used when no Dynamics data is available.
+ * Only handles "1st Payment" and "Final Payment" labels.
  */
 function estimatePaymentDate(
   label: string,
   project: ParsedProject
 ): Date {
-  const now = new Date();
-
-  // 1st Payment: ~1 week after quote date (invoice sent at quote signing)
   if (label === "1st Payment") {
-    if (project.quoteDate) {
-      return addWeeks(project.quoteDate, 1);
-    }
-    // Fallback: next month
-    return new Date(now.getFullYear(), now.getMonth() + 1, 15);
+    return estimateMilestoneDate("start", project);
   }
-
-  // For subsequent/final payments, use the dependency chain:
-
-  // 1. Best: Prod. ETA exists → invoice goes out then → payment +1 week
-  if (project.productionEta) {
-    return addWeeks(project.productionEta, 1);
-  }
-
-  // 2. Y/Z with Approved Shops date → production starts from approval
-  //    Estimate production as a portion of total leadtime
-  if (
-    (project.projectType === "Y" || project.projectType === "Z") &&
-    project.approvedShopsDate
-  ) {
-    // If we know total leadtime, estimate production as ~60% of it (design is ~40%)
-    const productionWeeks = project.leadtimeWeeks
-      ? Math.round(project.leadtimeWeeks * 0.6)
-      : 8; // default 8 weeks production
-    return addWeeks(project.approvedShopsDate, productionWeeks + 1);
-  }
-
-  // 3. Y/Z shops NOT yet approved → estimate from Due Date Shops
-  //    Assume ~2 weeks for approval after delivery, then production
-  if (
-    (project.projectType === "Y" || project.projectType === "Z") &&
-    project.shopsStatus !== "Approved" &&
-    project.dueDateShops
-  ) {
-    const productionWeeks = project.leadtimeWeeks
-      ? Math.round(project.leadtimeWeeks * 0.6)
-      : 8;
-    // Due Date Shops + 2 weeks approval buffer + production + 1 week payment
-    return addWeeks(project.dueDateShops, 2 + productionWeeks + 1);
-  }
-
-  // 4. Fallback: quote date + total leadtime + 1 week
-  if (project.quoteDate && project.leadtimeWeeks) {
-    return addWeeks(project.quoteDate, project.leadtimeWeeks + 1);
-  }
-
-  // 5. Last resort: rough estimate
-  const monthsOut = label === "Final Payment" ? 3 : 2;
-  return new Date(now.getFullYear(), now.getMonth() + monthsOut, 15);
+  // For "Final Payment" or anything else, estimate as pre-ship
+  return estimateMilestoneDate("pre-ship", project);
 }
+
+// ─── Main Sync ────────────────────────────────────────────────
 
 /**
  * Sync ClickUp projects into the local database.
- * Uses upsert to handle both new and updated projects.
+ * Enriches with Dynamics payment terms when available.
  * Preserves "invoiced" milestones that were matched by AR sync.
  */
 export async function syncClickUp(): Promise<SyncResult> {
-  const result: SyncResult = { total: 0, synced: 0, skipped: 0, errors: [] };
+  const result: SyncResult = { total: 0, synced: 0, skipped: 0, errors: [], dynamicsEnriched: 0 };
 
   // Fetch all active tasks from ClickUp
   let tasks;
@@ -95,6 +242,21 @@ export async function syncClickUp(): Promise<SyncResult> {
   }
 
   result.total = tasks.length;
+
+  // Batch-fetch Dynamics Won quotes for enrichment (graceful degradation)
+  let dynamicsMap = new Map<string, DynamicsQuoteData>();
+  try {
+    dynamicsMap = await Promise.race([
+      fetchDynamicsQuoteMap(),
+      new Promise<Map<string, DynamicsQuoteData>>((_, reject) =>
+        setTimeout(() => reject(new Error("Dynamics batch fetch timeout")), 30000)
+      ),
+    ]);
+    console.log(`[SYNC] Dynamics enrichment: ${dynamicsMap.size} Won quotes loaded`);
+  } catch (e) {
+    console.warn(`[SYNC] Dynamics enrichment unavailable: ${e instanceof Error ? e.message : e}`);
+    // Continue with ClickUp-only sync
+  }
 
   for (const task of tasks) {
     let parsed: ParsedProject | null;
@@ -112,6 +274,29 @@ export async function syncClickUp(): Promise<SyncResult> {
     }
 
     try {
+      // Check if Dynamics has better payment terms for this project
+      const dynamicsData = dynamicsMap.get(parsed.externalId);
+      let dynamicsMilestones: ComputedMilestone[] | null = null;
+      let resolvedPaymentTerms: string | null = parsed.paymentTerms;
+      let dynamicsDesignWeeks: number | null = null;
+      let dynamicsMfgWeeks: number | null = null;
+
+      if (dynamicsData) {
+        const decoded = decodeQuote(
+          dynamicsData.opp,
+          dynamicsData.quote,
+          dynamicsData.lineItems
+        );
+        // Only use Dynamics milestones if we got real terms (not default 50/50)
+        if (decoded.paymentTermsSource !== "default" && decoded.milestones.length > 0) {
+          dynamicsMilestones = decoded.milestones;
+          resolvedPaymentTerms = decoded.paymentTermsResolved;
+          dynamicsDesignWeeks = decoded.designWeeks;
+          dynamicsMfgWeeks = decoded.manufacturingWeeks;
+          result.dynamicsEnriched!++;
+        }
+      }
+
       // Upsert the project with timing fields
       const project = await prisma.project.upsert({
         where: {
@@ -137,7 +322,7 @@ export async function syncClickUp(): Promise<SyncResult> {
           dueDate: parsed.dueDate,
           contractDeadline: parsed.contractDeadline,
           actualDispatch: parsed.actualDispatch,
-          paymentTerms: parsed.paymentTerms,
+          paymentTerms: resolvedPaymentTerms,
         },
         create: {
           externalId: parsed.externalId,
@@ -158,7 +343,7 @@ export async function syncClickUp(): Promise<SyncResult> {
           dueDate: parsed.dueDate,
           contractDeadline: parsed.contractDeadline,
           actualDispatch: parsed.actualDispatch,
-          paymentTerms: parsed.paymentTerms,
+          paymentTerms: resolvedPaymentTerms,
         },
       });
 
@@ -168,7 +353,7 @@ export async function syncClickUp(): Promise<SyncResult> {
       });
       const invoicedByLabel = new Map<string, { status: string; invoiceId: string | null; expectedDate: Date }>();
       for (const em of existingMilestones) {
-        if (em.status === "invoiced" && em.label) {
+        if ((em.status === "invoiced" || em.status === "received") && em.label) {
           invoicedByLabel.set(em.label, {
             status: em.status,
             invoiceId: em.invoiceId,
@@ -182,40 +367,92 @@ export async function syncClickUp(): Promise<SyncResult> {
         where: { projectId: project.id },
       });
 
-      for (const ms of parsed.milestones) {
-        // Check if this milestone was previously matched to an AR invoice
-        const priorInvoiced = invoicedByLabel.get(ms.label);
+      // Use Dynamics milestones if available, otherwise ClickUp milestones
+      if (dynamicsMilestones) {
+        // Dynamics provides structure (amounts, triggers), ClickUp provides timing
+        for (let i = 0; i < dynamicsMilestones.length; i++) {
+          const dms = dynamicsMilestones[i];
 
-        // Use ClickUp date if available, then AR-matched date, then estimate
-        let expectedDate: Date;
-        let status = ms.status;
-        let invoiceId: string | null = null;
+          // Check for prior invoiced/received state
+          // Try exact label match first, then "Final Payment" for the last milestone
+          let priorInvoiced = invoicedByLabel.get(dms.label);
+          if (!priorInvoiced && i === dynamicsMilestones.length - 1) {
+            priorInvoiced = invoicedByLabel.get("Final Payment");
+          }
 
-        if (ms.status === "received" && ms.expectedDate) {
-          // ClickUp says received with a date — use it
-          expectedDate = ms.expectedDate;
-        } else if (priorInvoiced) {
-          // Restore AR-matched invoiced state
-          expectedDate = priorInvoiced.expectedDate;
-          status = priorInvoiced.status as "pending" | "invoiced" | "received";
-          invoiceId = priorInvoiced.invoiceId;
-        } else if (ms.expectedDate) {
-          expectedDate = ms.expectedDate;
-        } else {
-          // Estimate using real project data
-          expectedDate = estimatePaymentDate(ms.label, parsed);
+          // Check if ClickUp says this milestone is received
+          const clickupMs = parsed.milestones.find((m) => m.label === dms.label)
+            || (i === 0 ? parsed.milestones.find((m) => m.label === "1st Payment") : null)
+            || (i === dynamicsMilestones.length - 1 ? parsed.milestones.find((m) => m.label === "Final Payment") : null);
+          const clickupSaysReceived = clickupMs?.status === "received";
+
+          let expectedDate: Date;
+          let status: string;
+          let invoiceId: string | null = null;
+
+          if (clickupSaysReceived && clickupMs?.expectedDate) {
+            // ClickUp confirms received — use ClickUp date
+            expectedDate = clickupMs.expectedDate;
+            status = "received";
+          } else if (priorInvoiced) {
+            // Restore AR-matched invoiced/received state
+            expectedDate = priorInvoiced.expectedDate;
+            status = priorInvoiced.status;
+            invoiceId = priorInvoiced.invoiceId;
+          } else {
+            // Estimate date from ClickUp timing, using Dynamics trigger
+            expectedDate = estimateMilestoneDate(
+              dms.trigger,
+              parsed,
+              dynamicsDesignWeeks,
+              dynamicsMfgWeeks
+            );
+            status = "pending";
+          }
+
+          await prisma.paymentMilestone.create({
+            data: {
+              projectId: project.id,
+              label: dms.label,
+              amount: dms.amount,
+              expectedDate,
+              status,
+              invoiceId,
+            },
+          });
         }
+      } else {
+        // No Dynamics data — use ClickUp milestones (existing behavior)
+        for (const ms of parsed.milestones) {
+          const priorInvoiced = invoicedByLabel.get(ms.label);
 
-        await prisma.paymentMilestone.create({
-          data: {
-            projectId: project.id,
-            label: ms.label,
-            amount: ms.amount,
-            expectedDate,
-            status,
-            invoiceId,
-          },
-        });
+          let expectedDate: Date;
+          let status = ms.status;
+          let invoiceId: string | null = null;
+
+          if (ms.status === "received" && ms.expectedDate) {
+            expectedDate = ms.expectedDate;
+          } else if (priorInvoiced) {
+            expectedDate = priorInvoiced.expectedDate;
+            status = priorInvoiced.status as "pending" | "invoiced" | "received";
+            invoiceId = priorInvoiced.invoiceId;
+          } else if (ms.expectedDate) {
+            expectedDate = ms.expectedDate;
+          } else {
+            expectedDate = estimatePaymentDate(ms.label, parsed);
+          }
+
+          await prisma.paymentMilestone.create({
+            data: {
+              projectId: project.id,
+              label: ms.label,
+              amount: ms.amount,
+              expectedDate,
+              status,
+              invoiceId,
+            },
+          });
+        }
       }
 
       result.synced++;

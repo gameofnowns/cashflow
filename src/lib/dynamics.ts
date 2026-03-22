@@ -1,4 +1,10 @@
 import { prisma } from "./db";
+import {
+  getToken as getDynamicsQuotesToken,
+  dynamicsFetch as dynamicsQuotesFetch,
+  decodeQuote,
+  QUOTE_SELECT_FIELDS,
+} from "./dynamics-quotes";
 
 const TENANT_ID = process.env.DYNAMICS_TENANT_ID || "";
 const CLIENT_ID = process.env.DYNAMICS_CLIENT_ID || "";
@@ -229,43 +235,71 @@ export async function syncDynamics(): Promise<{
         },
       });
 
-      // Replace milestones — split 50/50 with type-aware timing
+      // Replace milestones using decoded Dynamics quote
       await prisma.paymentMilestone.deleteMany({
         where: { projectId: project.id },
       });
 
-      const closeDate = opp.estimatedclosedate
-        ? new Date(opp.estimatedclosedate)
-        : new Date(Date.now() + 90 * 24 * 60 * 60 * 1000);
+      // Fetch quote and decode with full resolution chain
+      let milestoneData: { label: string; amount: number; expectedDate: Date; status: string }[] = [];
+      try {
+        const quotesToken = await getDynamicsQuotesToken();
+        // Try Draft (0), then Active (3) quotes
+        let quoteToUse = null;
+        for (const sc of [0, 3]) {
+          const qResp = await dynamicsQuotesFetch(
+            `/quotes?$filter=_opportunityid_value eq '${opp.opportunityid}' and statecode eq ${sc}&$top=1&$orderby=createdon desc&$select=${QUOTE_SELECT_FIELDS}`,
+            quotesToken
+          );
+          if (qResp.value?.[0]) { quoteToUse = qResp.value[0]; break; }
+        }
 
-      // 1st payment: ~1 week after close (quote signed → invoice → payment)
-      // Final payment: depends on project type
-      //   X: close + 10 weeks (production only, no design)
-      //   Y/Z: close + 16 weeks (design + approval + production)
-      const firstPaymentWeeks = 1;
-      const finalPaymentWeeks = projectType === "X" ? 10 : 16;
+        // Conditionally fetch line items
+        let lineItems = null;
+        if (quoteToUse) {
+          const hasTerms = quoteToUse.paymenttermscode != null;
+          const manual = (quoteToUse.nown_manualentrypaymentterms || "").trim();
+          const manualOk = manual && !manual.toLowerCase().includes("see line") && /\d+%/.test(manual);
+          if (!hasTerms && !manualOk) {
+            try {
+              const liResp = await dynamicsQuotesFetch(
+                `/quotedetails?$filter=_quoteid_value eq '${quoteToUse.quoteid}'&$select=quotedetailname,productdescription,description,baseamount&$top=50`,
+                quotesToken
+              );
+              lineItems = liResp.value || null;
+            } catch { /* proceed without */ }
+          }
+        }
 
-      const addWeeks = (date: Date, weeks: number) =>
-        new Date(date.getTime() + weeks * 7 * 24 * 60 * 60 * 1000);
+        const decoded = decodeQuote(
+          { opportunityid: opp.opportunityid, name: opp.name, estimatedvalue: opp.estimatedvalue, estimatedclosedate: opp.estimatedclosedate },
+          quoteToUse,
+          lineItems
+        );
 
-      await prisma.paymentMilestone.createMany({
-        data: [
-          {
-            projectId: project.id,
-            label: "1st Payment",
-            amount: opp.estimatedvalue * 0.5,
-            expectedDate: addWeeks(closeDate, firstPaymentWeeks),
-            status: "pending",
-          },
-          {
-            projectId: project.id,
-            label: "Final Payment",
-            amount: opp.estimatedvalue * 0.5,
-            expectedDate: addWeeks(closeDate, finalPaymentWeeks),
-            status: "pending",
-          },
-        ],
-      });
+        milestoneData = decoded.milestones.map((m) => ({
+          label: m.label,
+          amount: m.amount,
+          expectedDate: new Date(m.estimatedDate),
+          status: "pending",
+        }));
+      } catch {
+        // Fallback: simple 50/50 if quote fetch fails
+        const closeDate = opp.estimatedclosedate
+          ? new Date(opp.estimatedclosedate)
+          : new Date(Date.now() + 90 * 24 * 60 * 60 * 1000);
+        const aw = (d: Date, w: number) => new Date(d.getTime() + w * 7 * 24 * 60 * 60 * 1000);
+        milestoneData = [
+          { label: "1st Payment", amount: opp.estimatedvalue * 0.5, expectedDate: aw(closeDate, 1), status: "pending" },
+          { label: "Final Payment", amount: opp.estimatedvalue * 0.5, expectedDate: aw(closeDate, projectType === "X" ? 10 : 16), status: "pending" },
+        ];
+      }
+
+      if (milestoneData.length > 0) {
+        await prisma.paymentMilestone.createMany({
+          data: milestoneData.map((m) => ({ projectId: project.id, ...m })),
+        });
+      }
 
       result.synced++;
     } catch (e) {

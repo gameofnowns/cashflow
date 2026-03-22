@@ -308,7 +308,7 @@ function compute(){
   return D.months.map(m=>{
     const cAr=T.currentAr?m.currentAr:0,bAr=T.billableAr?m.billableAr:0;
     const p3=T.phase3?(w?m.pipelinePhase3*0.9:m.pipelinePhase3):0;
-    const vat=T.vat?m.vatReturn:0,ap=T.ap?(m.ap||0):0;
+    const vat=0,ap=T.ap?(m.ap||0):0; // VAT is manual entry only — auto-calc disabled
     const cW=T.cogsWon?m.cogsWon:0;
     let cP=0;if(T.cogsPipeline&&T.phase3)cP=w?m.cogsPhase3*0.9:m.cogsPhase3;
     const oh=T.overhead?m.overhead:0;
@@ -752,11 +752,14 @@ const LAYER_NAMES={currentAr:'Current AR',billableAr:'Billable AR',committed:'Co
     const canvasRect=canvas.getBoundingClientRect();
     // Use canvas position for data mapping, but accept mouse anywhere in chart area
     const mx=e.clientX-canvasRect.left;
-    const W=canvasRect.width;
-    // Clamp mx to canvas bounds but don't hide — just clamp
-    const clampedMx=Math.max(0,Math.min(mx,W));
-
-    const frac=clampedMx/W;
+    // Map mouse X to the 12-month chart span (not full canvas width which includes FY Total)
+    // ttFrames[0].x = leftmost data point, ttFrames[last].x = rightmost
+    const chartL=ttFrames[0].x;
+    const chartR=ttFrames[ttFrames.length-1].x;
+    const chartSpanPx=chartR-chartL;
+    // If mouse is past the chart span (in FY Total zone), hide tooltip
+    if(mx>chartR+20){scanEl.style.opacity='0';ttEl.style.opacity='0';ringEl.style.opacity='0';return;}
+    const frac=Math.max(0,Math.min(1,(mx-chartL)/chartSpanPx));
     const idx=Math.round(frac*(ttFrames.length-1));
     const f=ttFrames[Math.max(0,Math.min(idx,ttFrames.length-1))];
     if(!f)return;
@@ -834,7 +837,7 @@ function renderPNL(c,cb){
     {l:'Total Inflow',fn:m=>m.inflow,cls:'row-in-total'},
     {l:'AP',fn:m=>-m.ap,cls:'row-ap'},
     {l:'COGS',fn:m=>-(m.cogsWon+m.cogsPipeline),cls:'row-cogs'},
-    {l:'VAT Returns',fn:m=>m.vat,cls:'row-vat'},
+    {l:'VAT Returns',fn:m=>m.vat,cls:'row-vat',editable:true,editType:'vat'},
     {l:'Overhead',fn:m=>-m.overhead,cls:'row-oh',editable:true},
     {l:'Total Outflow',fn:m=>-m.outflow,cls:'row-out-total'},
     {l:'Net',fn:(m,i)=>m.net,cls:'row-net'},
@@ -849,9 +852,11 @@ function renderPNL(c,cb){
     h+=`<tr class="${r.cls}"><td>${r.l}</td>`;
     c.forEach((m,i)=>{
       if(r.editable){
-        // Editable overhead cell — click to edit
-        const amt=m.overhead||0;
-        h+=`<td class="oh-cell" data-month="${m.month}" onclick="editOverhead(this,'${m.month}')" style="cursor:pointer;position:relative" title="Click to edit">- EUR ${amt>0?amt.toLocaleString('de-DE',{maximumFractionDigits:0}):'0'}</td>`;
+        const isVat=r.editType==='vat';
+        const amt=isVat?(m.vat||0):(m.overhead||0);
+        const prefix=isVat?'':'- ';
+        const editFn=isVat?'editVat':'editOverhead';
+        h+=`<td class="oh-cell" data-month="${m.month}" onclick="${editFn}(this,'${m.month}')" style="cursor:pointer;position:relative" title="Click to edit">${amt>0?prefix+'EUR '+amt.toLocaleString('de-DE',{maximumFractionDigits:0}):'<span class=\\'ghost\\'>—</span>'}</td>`;
       } else {
         const val=r.fn(m,i);h+=`<td class="${r.fc?'fc':''}">${v(val,r.fc)}</td>`;
       }
@@ -950,6 +955,44 @@ function editOverhead(cell,month){
   input.addEventListener('keydown',(e)=>{
     if(e.key==='Enter'){input.blur();}
     if(e.key==='Escape'){loadAll();} // Cancel
+  });
+}
+
+// ─── Editable VAT Returns ───────────────────────────────────
+function editVat(cell,month){
+  const current=Math.abs(parseFloat(cell.textContent.replace(/[^0-9.,\-]/g,'').replace(/\./g,'').replace(',','.'))||0);
+  const input=document.createElement('input');
+  input.className='oh-edit';
+  input.type='number';
+  input.value=current>0?Math.round(current):'';
+  input.placeholder='EUR';
+  cell.innerHTML='';
+  cell.appendChild(input);
+  input.focus();
+  input.select();
+
+  const save=async()=>{
+    const val=parseFloat(input.value)||0;
+    // Store VAT as a negative overhead entry with a special note
+    // For now, we'll use the overhead API with a VAT flag
+    // TODO: create a dedicated VAT entry API
+    try{
+      // Use overhead endpoint with month key — VAT returns stored as overhead with negative amount
+      // Actually, let's just update the monthly data directly by storing in overhead with a note
+      await fetch(`${API}/api/overhead`,{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        credentials:'include',
+        body:JSON.stringify({month:month+'-01',amount:val,type:'vat'})
+      });
+    }catch(e){console.error('Failed to save VAT:',e);}
+    loadAll();
+  };
+
+  input.addEventListener('blur',save);
+  input.addEventListener('keydown',(e)=>{
+    if(e.key==='Enter'){input.blur();}
+    if(e.key==='Escape'){loadAll();}
   });
 }
 

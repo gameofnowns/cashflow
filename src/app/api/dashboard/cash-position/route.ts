@@ -274,6 +274,25 @@ export async function GET(request: Request) {
           quoteToUse = activeResp.value?.[0] || null;
         }
 
+        // Conditionally fetch quote line items if terms need resolution
+        let quoteLineItems = null;
+        if (quoteToUse) {
+          const hasStandardTerms = quoteToUse.paymenttermscode != null;
+          const manual = (quoteToUse.nown_manualentrypaymentterms || "").trim();
+          const manualHasTerms = manual && !manual.toLowerCase().includes("see line") && /\d+%/.test(manual);
+          if (!hasStandardTerms && !manualHasTerms) {
+            try {
+              const liResp = await dynamicsFetch(
+                `/quotedetails?$filter=_quoteid_value eq '${quoteToUse.quoteid}'&$select=quotedetailname,productdescription,description,baseamount&$top=50`,
+                token
+              );
+              quoteLineItems = liResp.value || null;
+            } catch {
+              // Line item fetch failed — proceed without
+            }
+          }
+        }
+
         const decoded = decodeQuote(
           {
             opportunityid: opp.opportunityid,
@@ -281,7 +300,8 @@ export async function GET(request: Request) {
             estimatedvalue: opp.estimatedvalue,
             estimatedclosedate: opp.estimatedclosedate,
           },
-          quoteToUse
+          quoteToUse,
+          quoteLineItems
         );
 
         const phase = phaseFromStepname(opp.stepname);
