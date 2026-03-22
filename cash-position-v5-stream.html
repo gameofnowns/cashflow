@@ -999,10 +999,11 @@ function editVat(cell,month){
 // ─── Data loading ───────────────────────────────────────────
 async function loadAll(){
   document.getElementById('ts').textContent=new Date().toLocaleString('nl-NL').toLowerCase();
+  document.getElementById('metrics').innerHTML='<div class="r1-m"><span class="r1-ml">LOADING</span><span class="r1-mv">...</span></div>';
   const bv=document.getElementById('bank-input')?.value?.trim()||'';
   const params=bv?`?bankBalance=${encodeURIComponent(bv)}`:'';
   try{
-    const[dr,sr]=await Promise.all([fetch(`${API}/api/dashboard/cash-position${params}`),fetch(`${API}/api/dashboard/status`)]);
+    const[dr,sr]=await Promise.all([fetch(`${API}/api/dashboard/cash-position${params}`,{credentials:'include'}),fetch(`${API}/api/dashboard/status`,{credentials:'include'})]);
     const data=await dr.json();if(data.error)throw new Error(data.error);
     D=data;if(!bv&&D.bankBalance>0){const inp=document.getElementById('bank-input');if(inp)inp.value=Math.round(D.bankBalance);}
     try{const s=await sr.json();const el=document.getElementById('syncs');const dOk=s.dynamics?.connected&&s.dynamics?.tokenValid;const cOk=s.clickup?.connected&&(s.clickup?.projectsSynced||0)>0;const eOk=s.exact?.connected&&s.exact?.tokenValid;el.innerHTML=`<span class="r1-sync" onclick="runSync('dynamics')"><span class="r1-dot ${dOk?'ok':'off'}"></span>DYN</span><span class="r1-sync" onclick="runSync('clickup')"><span class="r1-dot ${cOk?'ok':'off'}"></span>CU</span><span class="r1-sync" onclick="runSync('exact')"><span class="r1-dot ${eOk?'ok':'off'}"></span>EX</span>`;}catch{}
@@ -1087,7 +1088,7 @@ async function checkSetup(){
 
 // ─── Init ───────────────────────────────────────────────────
 // Auth is handled by the parent page (page.tsx) — just load data directly
-loadAll();
+try { loadAll(); } catch(e) { console.error('loadAll failed:', e); document.getElementById('metrics').innerHTML='<div class="r1-m"><span class="r1-ml">ERROR</span><span class="r1-mv" style="font-size:10px;color:var(--terracotta)">'+e.message+'</span></div>'; }
 </script>
 </body>
 </html>
