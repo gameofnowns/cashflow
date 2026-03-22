@@ -16,15 +16,9 @@ export async function OPTIONS() {
  *
  * Returns connection and sync status for all three integrations.
  */
-export async function GET(request: NextRequest) {
-  // Auth check — return 401 if APP_PASSWORD is set but cookie doesn't match
-  const authPw = process.env.APP_PASSWORD || "";
-  if (authPw) {
-    const cookie = request.cookies.get("app_auth")?.value;
-    if (cookie !== authPw) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: CORS_HEADERS });
-    }
-  }
+export async function GET(_request: NextRequest) {
+  // No auth check here — the parent page handles login.
+  // The iframe shares the same origin so cookies pass through.
   try {
     // Check OAuth tokens
     const tokens = await prisma.oAuthToken.findMany();

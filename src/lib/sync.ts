@@ -35,34 +35,33 @@ interface DynamicsQuoteData {
 }
 
 /**
- * Batch-fetch all Dynamics closed-won opportunities with their quotes
- * and (when needed) quote line items. Returns a Map keyed by job number.
+ * Fetch Dynamics quote data for a specific set of job numbers.
+ * Only fetches quotes for projects we're about to sync (not all Won opps).
  *
  * Wrapped in a timeout + try/catch so ClickUp sync continues if Dynamics is down.
  */
-async function fetchDynamicsQuoteMap(): Promise<Map<string, DynamicsQuoteData>> {
+async function fetchDynamicsQuoteMap(
+  jobNumbers: string[]
+): Promise<Map<string, DynamicsQuoteData>> {
   const map = new Map<string, DynamicsQuoteData>();
+  if (jobNumbers.length === 0) return map;
 
   const token = await getToken();
 
-  // Fetch all Won opportunities (statecode=1 means Won)
-  const oppsResp = await dynamicsFetch(
-    `/opportunities?$filter=statecode eq 1&$select=opportunityid,name,estimatedvalue,actualclosedate,estimatedclosedate&$top=500`,
-    token
-  );
-  const opps = oppsResp.value || [];
-
-  // For each opp, extract job number and fetch the Won quote
-  // Process in batches of 5 to avoid hammering the API
+  // Fetch Won opportunities that match our job numbers
+  // Use contains() filter for each — batch into groups to stay under URL length limits
   const BATCH_SIZE = 5;
-  for (let i = 0; i < opps.length; i += BATCH_SIZE) {
-    const batch = opps.slice(i, i + BATCH_SIZE);
+  for (let i = 0; i < jobNumbers.length; i += BATCH_SIZE) {
+    const batch = jobNumbers.slice(i, i + BATCH_SIZE);
     const results = await Promise.allSettled(
-      batch.map(async (opp: Record<string, string>) => {
-        // Extract job number from opportunity name
-        const jobMatch = opp.name?.match(/(\d{2}-[XYZ]\d{3,4})/);
-        if (!jobMatch) return null;
-        const jobNo = jobMatch[1];
+      batch.map(async (jobNo) => {
+        // Find the Won opportunity for this job number
+        const oppsResp = await dynamicsFetch(
+          `/opportunities?$filter=statecode eq 1 and contains(name,'${jobNo}')&$top=1&$select=opportunityid,name,estimatedvalue,actualclosedate,estimatedclosedate`,
+          token
+        );
+        const opp = oppsResp.value?.[0];
+        if (!opp) return null;
 
         // Fetch Won quote (statecode=1 for Won, then 2 for Closed)
         let quote = null;
@@ -85,7 +84,6 @@ async function fetchDynamicsQuoteMap(): Promise<Map<string, DynamicsQuoteData>> 
           const manualHasTerms = manual && !manual.toLowerCase().includes("see line") && /\d+%/.test(manual);
 
           if (!hasStandardTerms && !manualHasTerms) {
-            // Need to check line items
             try {
               const liResp = await dynamicsFetch(
                 `/quotedetails?$filter=_quoteid_value eq '${quote.quoteid}'&$select=quotedetailname,productdescription,description,baseamount&$top=50`,
@@ -243,23 +241,8 @@ export async function syncClickUp(): Promise<SyncResult> {
 
   result.total = tasks.length;
 
-  // Batch-fetch Dynamics Won quotes for enrichment (graceful degradation)
-  let dynamicsMap = new Map<string, DynamicsQuoteData>();
-  try {
-    dynamicsMap = await Promise.race([
-      fetchDynamicsQuoteMap(),
-      new Promise<Map<string, DynamicsQuoteData>>((_, reject) =>
-        setTimeout(() => reject(new Error("Dynamics batch fetch timeout (60s)")), 60000)
-      ),
-    ]);
-    console.log(`[SYNC] Dynamics enrichment: ${dynamicsMap.size} Won quotes loaded`);
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    console.warn(`[SYNC] Dynamics enrichment unavailable: ${msg}`);
-    result.errors.push(`[Dynamics enrichment skipped: ${msg}]`);
-    // Continue with ClickUp-only sync
-  }
-
+  // Phase 1: Parse all ClickUp tasks first to collect job numbers
+  const parsedTasks: { task: typeof tasks[0]; parsed: ParsedProject }[] = [];
   for (const task of tasks) {
     let parsed: ParsedProject | null;
     try {
@@ -269,11 +252,32 @@ export async function syncClickUp(): Promise<SyncResult> {
       result.skipped++;
       continue;
     }
-
     if (!parsed) {
       result.skipped++;
       continue;
     }
+    parsedTasks.push({ task, parsed });
+  }
+
+  // Phase 2: Batch-fetch Dynamics quotes for parsed job numbers only
+  const jobNumbers = parsedTasks.map((t) => t.parsed.externalId);
+  let dynamicsMap = new Map<string, DynamicsQuoteData>();
+  try {
+    dynamicsMap = await Promise.race([
+      fetchDynamicsQuoteMap(jobNumbers),
+      new Promise<Map<string, DynamicsQuoteData>>((_, reject) =>
+        setTimeout(() => reject(new Error("Dynamics batch fetch timeout (120s)")), 120000)
+      ),
+    ]);
+    console.log(`[SYNC] Dynamics enrichment: ${dynamicsMap.size}/${jobNumbers.length} projects matched`);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.warn(`[SYNC] Dynamics enrichment unavailable: ${msg}`);
+    result.errors.push(`[Dynamics enrichment skipped: ${msg}]`);
+  }
+
+  // Phase 3: Upsert projects with enriched milestones
+  for (const { parsed } of parsedTasks) {
 
     try {
       // Check if Dynamics has better payment terms for this project

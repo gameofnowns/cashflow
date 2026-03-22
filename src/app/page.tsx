@@ -29,13 +29,17 @@ export default function Home() {
 
   const checkAuth = useCallback(async () => {
     try {
-      const res = await fetch("/api/dashboard/status", { credentials: "include" });
-      if (res.status === 401) {
+      // Step 1: Check if authenticated
+      const authRes = await fetch("/api/auth/check", { credentials: "include" });
+      if (authRes.status === 401) {
         setPhase("login");
         return;
       }
-      if (res.ok) {
-        const data = await res.json();
+
+      // Step 2: Check API connection status
+      const statusRes = await fetch("/api/dashboard/status", { credentials: "include" });
+      if (statusRes.ok) {
+        const data = await statusRes.json();
         setStatus(data);
         const dOk = data.dynamics?.connected && data.dynamics?.tokenValid;
         const cOk = data.clickup?.connected && (data.clickup?.projectsSynced || 0) > 0;
@@ -46,7 +50,7 @@ export default function Home() {
           setPhase("setup");
         }
       } else {
-        setPhase("dashboard"); // No auth required
+        setPhase("dashboard"); // Status failed but auth passed — show dashboard
       }
     } catch {
       setPhase("dashboard"); // Network error — try anyway
