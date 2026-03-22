@@ -856,7 +856,7 @@ function renderPNL(c,cb){
         const amt=isVat?(m.vat||0):(m.overhead||0);
         const prefix=isVat?'':'- ';
         const editFn=isVat?'editVat':'editOverhead';
-        h+=`<td class="oh-cell" data-month="${m.month}" onclick="${editFn}(this,'${m.month}')" style="cursor:pointer;position:relative" title="Click to edit">${amt>0?prefix+'EUR '+amt.toLocaleString('de-DE',{maximumFractionDigits:0}):'<span class=\\'ghost\\'>—</span>'}</td>`;
+        h+=`<td class="oh-cell" data-month="${m.month}" onclick="${editFn}(this,'${m.month}')" style="cursor:pointer;position:relative" title="Click to edit">${amt>0?prefix+'EUR '+amt.toLocaleString('de-DE',{maximumFractionDigits:0}):'<span class="ghost">—</span>'}</td>`;
       } else {
         const val=r.fn(m,i);h+=`<td class="${r.fc?'fc':''}">${v(val,r.fc)}</td>`;
       }
