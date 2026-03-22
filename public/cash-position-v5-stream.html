@@ -499,240 +499,173 @@ function renderBars(c,cb){
   renderCashLine(el,c,cb,cols,zeroY,scale,W,H);
 }
 
-// ─── GRADIENT FIELD (Stream Mode) ──────────────────────────
+// ─── STREAMGRAPH (Ghostly Gradient Streams) ────────────────
 
-function bucketIntoWeeks(c){
-  const numMonths=c.length;
-  const TOTAL_WEEKS=numMonths*4;
-  const weeks=[];
-  for(let w=0;w<TOTAL_WEEKS;w++){
-    const mi=Math.floor(w/4),wim=(w%4)+1;
-    weeks.push({weekIndex:w,monthIndex:mi,weekInMonth:wim,
-      inflows:{currentAr:0,billableAr:0,committed:0,vat:0},
-      outflows:{ap:0,cogsWon:0,cogsPipeline:0,overhead:0},
-      totalInflow:0,totalOutflow:0,netFlow:0,cashPosition:0,events:[]});
+function bell(center,peak,width,res){
+  const curve=new Array(res).fill(0);
+  for(let i=0;i<res;i++){const t=i/res;const d=(t-center)/width;curve[i]=peak*Math.exp(-d*d*2.5);}
+  return curve;
+}
+
+function smoothPath(pts){
+  if(pts.length<2)return'';
+  let d=`M${pts[0].x.toFixed(1)},${pts[0].y.toFixed(1)}`;
+  for(let i=1;i<pts.length;i++){
+    const p=pts[i-1],c=pts[i],mx=(p.x+c.x)/2;
+    d+=` C${mx.toFixed(1)},${p.y.toFixed(1)} ${mx.toFixed(1)},${c.y.toFixed(1)} ${c.x.toFixed(1)},${c.y.toFixed(1)}`;
   }
-  c.forEach((m,mi)=>{
-    const raw=m._,base=mi*4;
-    function wkFor(dateStr){
-      if(!dateStr)return base;
-      const day=new Date(dateStr).getDate();
-      if(day<=7)return base;if(day<=14)return base+1;if(day<=21)return base+2;return base+3;
-    }
-    (raw.currentArItems||[]).forEach(item=>{
-      const wi=wkFor(item.expectedDate);
-      weeks[wi].inflows.currentAr+=item.amount;weeks[wi].totalInflow+=item.amount;weeks[wi].netFlow+=item.amount;
-      weeks[wi].events.push({name:item.projectName,jobNo:item.jobNo,amount:item.amount,layer:'currentAr',color:COLORS.currentAr});
-    });
-    (raw.billableArItems||[]).forEach(item=>{
-      const wi=wkFor(item.expectedDate);
-      weeks[wi].inflows.billableAr+=item.amount;weeks[wi].totalInflow+=item.amount;weeks[wi].netFlow+=item.amount;
-      weeks[wi].events.push({name:item.projectName,jobNo:item.jobNo,amount:item.amount,layer:'billableAr',color:COLORS.billableAr});
-    });
-    (raw.pipelinePhase3Items||[]).forEach(item=>{
-      const wi=wkFor(item.expectedDate);
-      weeks[wi].inflows.committed+=item.amount;weeks[wi].totalInflow+=item.amount;weeks[wi].netFlow+=item.amount;
-      weeks[wi].events.push({name:item.projectName,jobNo:item.jobNo,amount:item.amount,layer:'committed',color:COLORS.committed});
-    });
-    if(m.vat>0){const pw=m.vat/4;for(let w=0;w<4;w++){weeks[base+w].inflows.vat+=pw;weeks[base+w].totalInflow+=pw;weeks[base+w].netFlow+=pw;}}
-    (raw.apItems||[]).forEach(item=>{
-      const wi=wkFor(item.expectedDate);
-      weeks[wi].outflows.ap+=item.amount;weeks[wi].totalOutflow+=item.amount;weeks[wi].netFlow-=item.amount;
-      weeks[wi].events.push({name:item.projectName,jobNo:null,amount:-item.amount,layer:'ap',color:COLORS.ap});
-    });
-    if(m.cogsWon>0){const pw=m.cogsWon/4;for(let w=0;w<4;w++){weeks[base+w].outflows.cogsWon+=pw;weeks[base+w].totalOutflow+=pw;weeks[base+w].netFlow-=pw;}}
-    if(m.cogsPipeline>0){const pw=m.cogsPipeline/4;for(let w=0;w<4;w++){weeks[base+w].outflows.cogsPipeline+=pw;weeks[base+w].totalOutflow+=pw;weeks[base+w].netFlow-=pw;}}
-    if(m.overhead>0){const pw=m.overhead/4;for(let w=0;w<4;w++){weeks[base+w].outflows.overhead+=pw;weeks[base+w].totalOutflow+=pw;weeks[base+w].netFlow-=pw;}}
-  });
-  return weeks;
+  return d;
 }
 
 function renderStream(c,cb){
   const el=document.getElementById('chart');el.innerHTML='';
   const H=el.offsetHeight||380,W=el.offsetWidth||800;
+  const{zeroY,scale,mA,mB}=calcScale(c,cb,H);
+  el.innerHTML=renderGrid(el,H,zeroY,scale,mA,mB);
   const cols=getColPositions(el,c);
+  const RES=96;
   const chartLeft=cols[0].x-cols[0].w/2;
   const chartRight=cols[cols.length-1].x+cols[cols.length-1].w/2;
   const chartSpan=chartRight-chartLeft;
 
-  // Bucket monthly data into discrete weeks (4 per month)
-  const weeks=bucketIntoWeeks(c);
-  const TW=weeks.length;
-  const ww=chartSpan/TW; // week width in pixels
+  // Layer definitions — each individually visible with ghostly fill + dashed outline
+  const inflowLayers=[
+    {key:'currentAr',color:COLORS.currentAr,fillOp:0.18,strokeOp:0.55,width:0.020,dash:''},
+    {key:'billableAr',color:COLORS.billableAr,fillOp:0.15,strokeOp:0.50,width:0.030,dash:'6,3'},
+    {key:'committed',color:COLORS.committed,fillOp:0.14,strokeOp:0.45,width:0.040,dash:'4,4'},
+    {key:'vat',color:COLORS.vat,fillOp:0.10,strokeOp:0.35,width:0.035,dash:'2,3'},
+  ];
+  const outflowLayers=[
+    {key:'overhead',color:COLORS.overhead,fillOp:0.14,strokeOp:0.40,width:0.035,dash:''},
+    {key:'cogsWon',color:COLORS.cogsWon,fillOp:0.15,strokeOp:0.45,width:0.030,dash:'6,3'},
+    {key:'cogsPipeline',color:COLORS.cogsPipeline,fillOp:0.12,strokeOp:0.35,width:0.030,dash:'4,4'},
+    {key:'ap',color:COLORS.ap,fillOp:0.16,strokeOp:0.50,width:0.020,dash:''},
+  ];
 
-  // Compute cumulative cash position per week
-  const bank=D.bankBalance;
-  let cash=bank;
-  weeks.forEach(w=>{cash+=w.netFlow;w.cashPosition=cash;});
+  // Build composite curves per layer
+  function buildCurves(layers,c){
+    return layers.map(layer=>{
+      const curve=new Array(RES).fill(0);
+      c.forEach((m,mi)=>{
+        const center=(mi+0.5)/c.length;
+        const val=m[layer.key]||0;
+        if(val>0){const b=bell(center,val,layer.width,RES);for(let i=0;i<RES;i++)curve[i]+=b[i];}
+      });
+      return{...layer,curve};
+    });
+  }
 
-  // Zone layout
-  const z1Top=18,z1H=H*0.56,z1Bot=z1Top+z1H;
-  const gap=14;
-  const z2Top=z1Bot+gap,z2H=H*0.22,z2Bot=z2Top+z2H,z2Mid=z2Top+z2H/2;
+  const inflowCurves=buildCurves(inflowLayers,c);
+  const outflowCurves=buildCurves(outflowLayers,c);
 
-  // Cash Y-axis scale (Zone 1)
-  const allCash=weeks.map(w=>w.cashPosition);allCash.push(bank);
-  const cMax=Math.max(...allCash),cMin=Math.min(...allCash);
-  const cPad=(cMax-cMin)*0.14||100000;
-  const yMax=cMax+cPad,yMin=cMin-cPad,yRange=yMax-yMin||1;
-  function cashY(v){return z1Top+(1-(v-yMin)/yRange)*z1H;}
-
-  // Normalization for density columns
-  const maxIn=Math.max(...weeks.map(w=>w.totalInflow),1);
-  const maxOut=Math.max(...weeks.map(w=>w.totalOutflow),1);
-
-  // Build SVG
+  // SVG with gradient defs for ghostly fills
   let svg=`<svg class="stream-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">`;
+  svg+=`<defs>`;
+  // Vertical fade gradients per layer — ghostly effect
+  [...inflowLayers,...outflowLayers].forEach(layer=>{
+    const rgb=hexToRgb(layer.color);
+    svg+=`<linearGradient id="grd-${layer.key}" x1="0" y1="0" x2="0" y2="1">`;
+    svg+=`<stop offset="0%" stop-color="rgba(${rgb},${(layer.fillOp*1.2).toFixed(2)})"/>`;
+    svg+=`<stop offset="50%" stop-color="rgba(${rgb},${layer.fillOp.toFixed(2)})"/>`;
+    svg+=`<stop offset="100%" stop-color="rgba(${rgb},${(layer.fillOp*0.3).toFixed(2)})"/>`;
+    svg+=`</linearGradient>`;
+  });
+  svg+=`</defs>`;
 
-  // Month boundary lines
-  for(let mi=1;mi<c.length;mi++){
-    const x=chartLeft+mi*4*ww;
-    svg+=`<line x1="${x}" y1="${z1Top}" x2="${x}" y2="${z2Bot}" stroke="rgba(0,0,0,0.05)" stroke-width="0.5"/>`;
+  // Month separator lines
+  for(let i=1;i<c.length;i++){
+    const x=cols[i].x-cols[i].w/2;
+    svg+=`<line x1="${x}" y1="0" x2="${x}" y2="${H}" stroke="rgba(0,0,0,0.04)" stroke-width="0.5"/>`;
   }
 
-  // Y-axis grid lines + labels (Zone 1)
-  const zeroY=cashY(0);
-  if(zeroY>z1Top&&zeroY<z1Bot){
-    svg+=`<line x1="${chartLeft}" y1="${zeroY}" x2="${chartLeft+chartSpan}" y2="${zeroY}" stroke="rgba(0,0,0,0.08)" stroke-width="0.5"/>`;
-  }
-  const rawStep=(yMax-yMin)/5,mag=Math.pow(10,Math.floor(Math.log10(rawStep||1)));
-  const niceStep=[1,2,5,10].map(m=>m*mag).find(s=>(yMax-yMin)/s<=6)||mag*10;
-  for(let v=Math.ceil(yMin/niceStep)*niceStep;v<=yMax;v+=niceStep){
-    const y=cashY(v);
-    if(y<z1Top+8||y>z1Bot-8)continue;
-    svg+=`<text x="${chartLeft-4}" y="${y+3}" text-anchor="end" fill="rgba(0,0,0,0.18)" font-size="7" font-family="var(--font)">${K(v)}</text>`;
-    if(Math.abs(v)>niceStep*0.1){
-      svg+=`<line x1="${chartLeft}" y1="${y}" x2="${chartLeft+chartSpan}" y2="${y}" stroke="rgba(0,0,0,0.03)" stroke-width="0.5"/>`;
+  // ── Render inflow streams (stacking upward) ──
+  // Each layer: ghostly gradient fill + dashed outline at top edge
+  let inflowBase=new Array(RES).fill(0);
+  inflowCurves.forEach(layer=>{
+    const topEdge=[],botEdge=[];
+    for(let i=0;i<RES;i++){
+      const x=chartLeft+(i/RES)*chartSpan;
+      const botY=zeroY-inflowBase[i]*scale;
+      const topY=zeroY-(inflowBase[i]+layer.curve[i])*scale;
+      botEdge.push({x,y:botY});
+      topEdge.push({x,y:topY});
     }
-  }
+    // Filled area — ghostly gradient
+    const fwd=smoothPath(topEdge);
+    const bwd=smoothPath([...botEdge].reverse());
+    const areaD=fwd+` L${botEdge[botEdge.length-1].x.toFixed(1)},${botEdge[botEdge.length-1].y.toFixed(1)} ${bwd.slice(1)} Z`;
+    svg+=`<path d="${areaD}" fill="url(#grd-${layer.key})" stroke="none"/>`;
 
-  // ── ZONE 1: Gradient density columns ──
-  weeks.forEach((week,wi)=>{
-    const x=chartLeft+wi*ww;
-    const cy=cashY(week.cashPosition);
-    if(week.totalInflow>0){
-      const r=week.totalInflow/maxIn;
-      const op=Math.max(0.04,r*0.50).toFixed(3);
-      const h=Math.max(2,r*z1H*0.45);
-      const top=Math.max(z1Top,cy-h);
-      svg+=`<rect x="${x}" y="${top}" width="${(ww-0.5).toFixed(1)}" height="${(cy-top).toFixed(1)}" fill="rgba(74,158,92,${op})" rx="1"/>`;
+    // Outline at top edge — dashed for differentiation
+    const rgb=hexToRgb(layer.color);
+    const outlineD=smoothPath(topEdge);
+    svg+=`<path d="${outlineD}" fill="none" stroke="rgba(${rgb},${layer.strokeOp})" stroke-width="1.2" ${layer.dash?`stroke-dasharray="${layer.dash}"`:''}/>`;
+
+    // Peak label inside the band
+    const peakIdx=layer.curve.indexOf(Math.max(...layer.curve));
+    if(peakIdx>=0){
+      const peakVal=layer.curve[peakIdx];
+      const bandH=peakVal*scale;
+      if(bandH>18){
+        const px=chartLeft+(peakIdx/RES)*chartSpan;
+        const py=zeroY-(inflowBase[peakIdx]+peakVal*0.5)*scale;
+        svg+=`<text x="${px}" y="${py}" text-anchor="middle" font-size="7" font-weight="600" fill="rgba(${rgb},0.85)" font-family="var(--font)">${layer.key==='currentAr'?'Current AR':layer.key==='billableAr'?'Billable':layer.key==='committed'?'Committed':'VAT'}</text>`;
+        svg+=`<text x="${px}" y="${py+9}" text-anchor="middle" font-size="6" fill="rgba(0,0,0,0.30)" font-family="var(--font)">${K(peakVal)}</text>`;
+      }
     }
-    if(week.totalOutflow>0){
-      const r=week.totalOutflow/maxOut;
-      const op=Math.max(0.04,r*0.40).toFixed(3);
-      const h=Math.max(2,r*z1H*0.35);
-      const bot=Math.min(z1Bot,cy+h);
-      svg+=`<rect x="${x}" y="${cy.toFixed(1)}" width="${(ww-0.5).toFixed(1)}" height="${(bot-cy).toFixed(1)}" fill="rgba(192,57,43,${op})" rx="1"/>`;
+
+    for(let i=0;i<RES;i++)inflowBase[i]+=layer.curve[i];
+  });
+
+  // ── Render outflow streams (stacking downward) ──
+  let outflowBase=new Array(RES).fill(0);
+  outflowCurves.forEach(layer=>{
+    const topEdge=[],botEdge=[];
+    for(let i=0;i<RES;i++){
+      const x=chartLeft+(i/RES)*chartSpan;
+      const topY=zeroY+outflowBase[i]*scale;
+      const botY=zeroY+(outflowBase[i]+layer.curve[i])*scale;
+      topEdge.push({x,y:topY});
+      botEdge.push({x,y:botY});
     }
-  });
+    // Filled area — ghostly gradient
+    const fwd=smoothPath(botEdge);
+    const bwd=smoothPath([...topEdge].reverse());
+    const areaD=fwd+` L${topEdge[topEdge.length-1].x.toFixed(1)},${topEdge[topEdge.length-1].y.toFixed(1)} ${bwd.slice(1)} Z`;
+    svg+=`<path d="${areaD}" fill="url(#grd-${layer.key})" stroke="none"/>`;
 
-  // ── ZONE 1: Cash position line (tube map routing) ──
-  let prevCash=bank;
-  let pathD=`M${chartLeft},${cashY(bank).toFixed(1)}`;
-  const stations=[];
+    // Outline at bottom edge — dashed
+    const rgb=hexToRgb(layer.color);
+    const outlineD=smoothPath(botEdge);
+    svg+=`<path d="${outlineD}" fill="none" stroke="rgba(${rgb},${layer.strokeOp})" stroke-width="1.2" ${layer.dash?`stroke-dasharray="${layer.dash}"`:''}/>`;
 
-  weeks.forEach((week,wi)=>{
-    const x1=chartLeft+wi*ww,x2=x1+ww;
-    const y1=cashY(prevCash),y2=cashY(week.cashPosition);
-    const hasEvt=week.totalInflow>0||week.totalOutflow>0;
-    if(hasEvt&&Math.abs(y1-y2)>1.5){
-      const diag=Math.min(ww*0.6,Math.abs(y2-y1)*0.7);
-      pathD+=` L${x1.toFixed(1)},${y1.toFixed(1)}`;
-      pathD+=` L${(x1+diag).toFixed(1)},${y2.toFixed(1)}`;
-      pathD+=` L${x2.toFixed(1)},${y2.toFixed(1)}`;
-      stations.push({x:x1+diag*0.5,y:(y1+y2)/2});
-    }else{
-      pathD+=` L${x2.toFixed(1)},${y1.toFixed(1)}`;
+    // Peak label
+    const peakIdx=layer.curve.indexOf(Math.max(...layer.curve));
+    if(peakIdx>=0){
+      const peakVal=layer.curve[peakIdx];
+      const bandH=peakVal*scale;
+      if(bandH>18){
+        const px=chartLeft+(peakIdx/RES)*chartSpan;
+        const py=zeroY+(outflowBase[peakIdx]+peakVal*0.5)*scale;
+        svg+=`<text x="${px}" y="${py}" text-anchor="middle" font-size="7" font-weight="600" fill="rgba(${rgb},0.85)" font-family="var(--font)">${layer.key==='ap'?'AP':layer.key==='cogsWon'?'COGS':layer.key==='overhead'?'Overhead':'COGS (P)'}</text>`;
+        svg+=`<text x="${px}" y="${py+9}" text-anchor="middle" font-size="6" fill="rgba(0,0,0,0.30)" font-family="var(--font)">${K(peakVal)}</text>`;
+      }
     }
-    prevCash=week.cashPosition;
+
+    for(let i=0;i<RES;i++)outflowBase[i]+=layer.curve[i];
   });
 
-  svg+=`<path d="${pathD}" fill="none" stroke="#1A1814" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>`;
-  stations.forEach(d=>{svg+=`<circle cx="${d.x.toFixed(1)}" cy="${d.y.toFixed(1)}" r="4" fill="#EAE6DF" stroke="#1A1814" stroke-width="1.5"/>`;});
-
-  // Interval dots every 2 weeks on flat segments
-  weeks.forEach((week,wi)=>{
-    if(wi%2!==0)return;
-    const cx=chartLeft+wi*ww+ww/2;
-    if(stations.some(d=>Math.abs(d.x-cx)<ww))return;
-    svg+=`<circle cx="${cx.toFixed(1)}" cy="${cashY(week.cashPosition).toFixed(1)}" r="3" fill="#EAE6DF" stroke="#1A1814" stroke-width="1.2"/>`;
-  });
-
-  // End value label
-  const lastW=weeks[TW-1],lastX=chartLeft+TW*ww,lastY=cashY(lastW.cashPosition);
-  svg+=`<text x="${lastX+4}" y="${lastY+3}" fill="${lastW.cashPosition>=0?'#1A1814':'#BD6A55'}" font-size="8" font-weight="600" font-family="var(--font)">${K(lastW.cashPosition)}</text>`;
-
-  // Start value label
-  svg+=`<text x="${chartLeft-4}" y="${cashY(bank)-6}" text-anchor="end" fill="#1A1814" font-size="8" font-weight="700" font-family="var(--font)">${K(bank)}</text>`;
-
-  // ── ZONE 2: Decomposition strip ──
-  const halfH=(z2H/2)-4;
-  svg+=`<line x1="${chartLeft}" y1="${z2Mid}" x2="${chartLeft+chartSpan}" y2="${z2Mid}" stroke="rgba(0,0,0,0.06)" stroke-width="0.5"/>`;
-  svg+=`<text x="${chartLeft-4}" y="${z2Mid-halfH/2+3}" text-anchor="end" fill="rgba(0,0,0,0.15)" font-size="6" font-family="var(--font)">IN</text>`;
-  svg+=`<text x="${chartLeft-4}" y="${z2Mid+halfH/2+3}" text-anchor="end" fill="rgba(0,0,0,0.15)" font-size="6" font-family="var(--font)">OUT</text>`;
-
-  weeks.forEach((week,wi)=>{
-    const x=chartLeft+wi*ww;
-    // Inflows upward
-    let sy=z2Mid;
-    ['currentAr','billableAr','committed','vat'].forEach(k=>{
-      const v=week.inflows[k]||0;if(v<=0)return;
-      const h=Math.max(1,(v/maxIn)*halfH);sy-=h;
-      svg+=`<rect x="${(x+0.5).toFixed(1)}" y="${sy.toFixed(1)}" width="${(ww-1).toFixed(1)}" height="${h.toFixed(1)}" fill="${COLORS[k]}" opacity="0.55" rx="0.5"/>`;
-    });
-    // Outflows downward
-    sy=z2Mid;
-    ['overhead','cogsWon','cogsPipeline','ap'].forEach(k=>{
-      const v=week.outflows[k]||0;if(v<=0)return;
-      const h=Math.max(1,(v/maxOut)*halfH);
-      svg+=`<rect x="${(x+0.5).toFixed(1)}" y="${sy.toFixed(1)}" width="${(ww-1).toFixed(1)}" height="${h.toFixed(1)}" fill="${COLORS[k]}" opacity="0.45" rx="0.5"/>`;
-      sy+=h;
-    });
-  });
-
-  // ── Month labels (X-axis) ──
-  c.forEach((m,mi)=>{
-    const x=chartLeft+(mi*4+2)*ww;
-    const label=sm(m.month).split(' ')[0].toUpperCase();
-    svg+=`<text x="${x}" y="${z2Bot+14}" text-anchor="middle" fill="#6b6860" font-size="7" font-family="var(--font)" letter-spacing="0.5">${label}</text>`;
-  });
-
-  // ── Week numbers (top, every 2 weeks) ──
-  for(let w=0;w<TW;w+=2){
-    svg+=`<text x="${chartLeft+w*ww+ww/2}" y="${z1Top-4}" text-anchor="middle" fill="rgba(0,0,0,0.08)" font-size="5" font-family="var(--font)">${w+1}</text>`;
-  }
-
-  // ── Today marker ──
+  // Today marker
   const nowFrac=0.03;
   const todayX=chartLeft+nowFrac*chartSpan;
-  svg+=`<line x1="${todayX}" y1="${z1Top}" x2="${todayX}" y2="${z2Bot}" stroke="#FE6337" stroke-width="1" stroke-dasharray="4,3" opacity="0.3"/>`;
-  svg+=`<text x="${todayX}" y="${z1Top-10}" text-anchor="middle" fill="#FE6337" font-size="6" font-family="var(--font)" opacity="0.5">TODAY</text>`;
+  svg+=`<line x1="${todayX}" y1="0" x2="${todayX}" y2="${H}" stroke="#FE6337" stroke-width="1" stroke-dasharray="4,3" opacity="0.3"/>`;
+  svg+=`<text x="${todayX}" y="10" font-size="6" fill="#FE6337" opacity="0.5" font-family="var(--font)">TODAY</text>`;
 
-  // ── FY Total zone ──
+  // FY Total separator
   svg+=`<line x1="${chartRight}" y1="0" x2="${chartRight}" y2="${H}" stroke="#1A1814" stroke-width="1"/>`;
   svg+=`<rect x="${chartRight}" y="0" width="${W-chartRight}" height="${H}" fill="rgba(26,24,20,0.04)"/>`;
-  const fyMidX=chartRight+(W-chartRight)/2;
-  // FY references December cash position
-  const decIdx=c.reduce((last,m,i)=>m.month.endsWith('-12')?i:last,-1);
-  const decWeekEnd=decIdx>=0?(decIdx+1)*4-1:TW-1;
-  const fyVal=weeks[decWeekEnd].cashPosition;
-  const fyY=cashY(fyVal);
-  // Dashed continuation from last December week to FY zone
-  const decX=chartLeft+(decWeekEnd+1)*ww;
-  svg+=`<line x1="${decX}" y1="${fyY}" x2="${chartRight}" y2="${fyY}" stroke="#1A1814" stroke-width="2" stroke-dasharray="4,3" opacity="0.4"/>`;
-  // Orange bar
-  svg+=`<line x1="${chartRight+8}" y1="${fyY}" x2="${W-8}" y2="${fyY}" stroke="#FE6337" stroke-width="3.5" stroke-linecap="butt"/>`;
-  svg+=`<circle cx="${fyMidX}" cy="${fyY}" r="5" fill="#FE6337" stroke="#EAE6DF" stroke-width="2"/>`;
-  // Zero ref in FY zone
-  const fyZeroY=cashY(0);
-  svg+=`<line x1="${chartRight+4}" y1="${fyZeroY}" x2="${W-4}" y2="${fyZeroY}" stroke="#A09890" stroke-width="0.5" stroke-dasharray="2,2" opacity="0.5"/>`;
-  // FY value label
-  const fyLabelY=fyY<fyZeroY?fyY-12:fyY+16;
-  svg+=`<text x="${fyMidX}" y="${fyLabelY}" text-anchor="middle" font-size="11" font-weight="700" fill="${fyVal<0?'#BD6A55':'#FE6337'}" font-family="var(--font)" letter-spacing="1">${fyVal<0?'- ':''}EUR ${K(Math.abs(fyVal))}</text>`;
-  const fySubY=fyY<fyZeroY?fyY-22:fyY+26;
-  svg+=`<text x="${fyMidX}" y="${fySubY}" text-anchor="middle" font-size="6" font-weight="700" fill="#A09890" font-family="var(--font)" letter-spacing="2">FY CLOSE</text>`;
-  svg+=`<text x="${fyMidX}" y="${H/2-8}" text-anchor="middle" font-size="8" font-weight="700" fill="#A09890" font-family="var(--font)" letter-spacing="2">FY</text>`;
-  svg+=`<text x="${fyMidX}" y="${H/2+4}" text-anchor="middle" font-size="8" font-weight="700" fill="#A09890" font-family="var(--font)" letter-spacing="2">TOTAL</text>`;
+  svg+=`<text x="${chartRight+(W-chartRight)/2}" y="${H/2-8}" text-anchor="middle" font-size="8" font-weight="700" fill="#A09890" font-family="var(--font)" letter-spacing="2">FY</text>`;
+  svg+=`<text x="${chartRight+(W-chartRight)/2}" y="${H/2+4}" text-anchor="middle" font-size="8" font-weight="700" fill="#A09890" font-family="var(--font)" letter-spacing="2">TOTAL</text>`;
 
   svg+=`</svg>`;
   el.innerHTML+=svg;
@@ -740,46 +673,75 @@ function renderStream(c,cb){
   // FY separator extending to table
   el.innerHTML+=`<div style="position:absolute;top:0;bottom:0;left:${chartRight}px;width:1px;background:var(--ink);z-index:5"></div>`;
 
-  // Pre-compute tooltip frames
-  precomputeGradientTooltipFrames(weeks,c,chartLeft,chartSpan,ww,TW,cashY);
+  // Cash position line on top (snappy, with station dots at each month)
+  renderCashLine(el,c,cb,cols,zeroY,scale,W,H);
+
+  // Pre-compute tooltip frames — one per month, snaps to cash dots
+  precomputeSnappingTooltipFrames(c,cb,inflowCurves,outflowCurves,cols,zeroY,scale,W,H,RES);
 }
 
 function hexToRgb(hex){const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);return`${r},${g},${b}`;}
 
-// ─── Stream Tooltip System (project-level data) ─────────────
+// ─── Stream Tooltip System (snapping to monthly cash dots) ──
 let ttFrames=[];
 
-function precomputeGradientTooltipFrames(weeks,c,chartLeft,chartSpan,ww,TW,cashY){
+function precomputeSnappingTooltipFrames(c,cb,inflowCurves,outflowCurves,cols,zeroY,scale,W,H,RES){
   const frames=[];
-  // Generate multiple frames per week for smooth cursor tracking
-  const framesPerWeek=Math.max(2,Math.ceil(96/TW));
+  const bank=D.bankBalance;
+  let cash=bank;
+  const cashPts=c.map((m,i)=>{cash+=m.net;return{x:cols[i].x,y:zeroY-cash*scale,cash};});
+  const cLeft=cols[0].x-cols[0].w/2;
+  const cRight=cols[cols.length-1].x+cols[cols.length-1].w/2;
+  const cSpan=cRight-cLeft;
 
-  weeks.forEach((week,wi)=>{
-    for(let f=0;f<framesPerWeek;f++){
-      const sub=f/framesPerWeek;
-      const x=chartLeft+(wi+sub)*ww;
-      const mi=week.monthIndex;
-      const monthName=c[mi]?sm(c[mi].month).split(' ')[0].toUpperCase():'';
-      // ISO week number
-      const startDate=new Date(c[0].month+'-01');
-      const pointDate=new Date(startDate.getTime()+((wi+sub)/TW)*365.25*24*60*60*1000);
-      const oneJan=new Date(pointDate.getFullYear(),0,1);
-      const wkNum=Math.ceil(((pointDate.getTime()-oneJan.getTime())/86400000+oneJan.getDay()+1)/7);
+  // Build per-project item lists per month (no bell sampling — exact monthly data)
+  c.forEach((m,mi)=>{
+    const raw=m._;
+    const monthName=sm(m.month).split(' ')[0].toUpperCase();
+    const startDate=new Date(c[0].month+'-01');
+    const frac=(mi+0.5)/c.length;
+    const pointDate=new Date(startDate.getTime()+frac*365.25*24*60*60*1000);
+    const oneJan=new Date(pointDate.getFullYear(),0,1);
+    const week=Math.ceil(((pointDate.getTime()-oneJan.getTime())/86400000+oneJan.getDay()+1)/7);
 
-      // Group events by layer
-      const byLayer={};
-      week.events.forEach(e=>{
-        if(!byLayer[e.layer])byLayer[e.layer]={items:[],color:e.color,total:0};
-        byLayer[e.layer].items.push({name:e.name,jobNo:e.jobNo,amount:e.amount,layer:e.layer,color:e.color});
-        byLayer[e.layer].total+=e.amount;
-      });
+    // Collect all project items for this month
+    const projects=[];
+    (raw.currentArItems||[]).forEach(item=>{
+      projects.push({name:item.projectName,jobNo:item.jobNo,amount:item.amount,layer:'currentAr',color:COLORS.currentAr});
+    });
+    (raw.billableArItems||[]).forEach(item=>{
+      projects.push({name:item.projectName,jobNo:item.jobNo,amount:item.amount,layer:'billableAr',color:COLORS.billableAr});
+    });
+    (raw.pipelinePhase3Items||[]).forEach(item=>{
+      projects.push({name:item.projectName,jobNo:item.jobNo,amount:item.amount,layer:'committed',color:COLORS.committed});
+    });
+    (raw.apItems||[]).forEach(item=>{
+      projects.push({name:item.projectName,jobNo:null,amount:-item.amount,layer:'ap',color:COLORS.ap});
+    });
+    // Add aggregate outflow layers as summary items
+    if(m.cogsWon>0)projects.push({name:'COGS (Won projects)',jobNo:null,amount:-m.cogsWon,layer:'cogsWon',color:COLORS.cogsWon});
+    if(m.cogsPipeline>0)projects.push({name:'COGS (Pipeline)',jobNo:null,amount:-m.cogsPipeline,layer:'cogsPipeline',color:COLORS.cogsPipeline});
+    if(m.overhead>0)projects.push({name:'Monthly Overhead',jobNo:null,amount:-m.overhead,layer:'overhead',color:COLORS.overhead});
+    if(m.vat>0)projects.push({name:'VAT Return',jobNo:null,amount:m.vat,layer:'vat',color:COLORS.vat});
 
-      // Cash position on the tube-map line at this week
-      const cx=chartLeft+wi*ww+ww/2;
-      const cy=cashY(week.cashPosition);
+    projects.sort((a,b)=>Math.abs(b.amount)-Math.abs(a.amount));
 
-      frames.push({x,monthName,week:wkNum,totalIn:week.totalInflow,totalOut:week.totalOutflow,net:week.netFlow,byLayer,cashPosition:week.cashPosition,cashX:cx,cashY:cy});
-    }
+    // Group by layer
+    const byLayer={};
+    projects.forEach(p=>{
+      if(!byLayer[p.layer])byLayer[p.layer]={items:[],color:p.color,total:0};
+      byLayer[p.layer].items.push(p);
+      byLayer[p.layer].total+=p.amount;
+    });
+
+    const pt=cashPts[mi];
+    frames.push({
+      x:cols[mi].x,         // snap X = column center (cash dot position)
+      monthName,week,
+      totalIn:m.inflow,totalOut:m.outflow,net:m.net,
+      byLayer,
+      cashPosition:pt.cash,cashX:pt.x,cashY:pt.y
+    });
   });
   ttFrames=frames;
 }
@@ -805,20 +767,18 @@ const LAYER_NAMES={currentAr:'Current AR',billableAr:'Billable AR',committed:'Co
     const canvasRect=canvas.getBoundingClientRect();
     // Use canvas position for data mapping, but accept mouse anywhere in chart area
     const mx=e.clientX-canvasRect.left;
-    // Map mouse X to the 12-month chart span (not full canvas width which includes FY Total)
-    // ttFrames[0].x = leftmost data point, ttFrames[last].x = rightmost
+    // Snap to nearest monthly cash point — find closest frame by X distance
     const chartL=ttFrames[0].x;
     const chartR=ttFrames[ttFrames.length-1].x;
-    const chartSpanPx=chartR-chartL;
     // If mouse is past the chart span (in FY Total zone), hide tooltip
-    if(mx>chartR+20){scanEl.style.opacity='0';ttEl.style.opacity='0';ringEl.style.opacity='0';return;}
-    const frac=Math.max(0,Math.min(1,(mx-chartL)/chartSpanPx));
-    const idx=Math.round(frac*(ttFrames.length-1));
-    const f=ttFrames[Math.max(0,Math.min(idx,ttFrames.length-1))];
+    if(mx>chartR+(chartR-chartL)/ttFrames.length){scanEl.style.opacity='0';ttEl.style.opacity='0';ringEl.style.opacity='0';return;}
+    let bestIdx=0,bestDist=Math.abs(mx-ttFrames[0].x);
+    for(let i=1;i<ttFrames.length;i++){const d=Math.abs(mx-ttFrames[i].x);if(d<bestDist){bestDist=d;bestIdx=i;}}
+    const f=ttFrames[bestIdx];
     if(!f)return;
 
-    // Scan line — always visible, full height of chart area
-    scanEl.style.transform=`translateX(${120+f.x}px)`;
+    // Scan line snaps to the cash dot X position
+    scanEl.style.transform=`translateX(${120+f.cashX}px)`;
     scanEl.style.opacity='1';
 
     // Header

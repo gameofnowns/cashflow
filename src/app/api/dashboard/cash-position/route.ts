@@ -421,6 +421,28 @@ export async function GET(request: Request) {
       }
     }
 
+    // ─── BUILD EVENTS (daily granularity for chart) ─────────
+
+    const events: {
+      date: string; layer: string; amount: number;
+      projectName: string; jobNo: string | null; label: string | null;
+    }[] = [];
+
+    for (const mk of monthKeys) {
+      const m = months[mk];
+      for (const item of m.currentArItems) events.push({ date: item.expectedDate, layer: "currentAr", amount: item.amount, projectName: item.projectName, jobNo: item.jobNo, label: item.label });
+      for (const item of m.billableArItems) events.push({ date: item.expectedDate, layer: "billableAr", amount: item.amount, projectName: item.projectName, jobNo: item.jobNo, label: item.label });
+      for (const item of m.pipelinePhase3Items) events.push({ date: item.expectedDate, layer: "pipelinePhase3", amount: item.amount, projectName: item.projectName, jobNo: item.jobNo, label: item.label });
+      for (const item of m.pipelinePhase2Items) events.push({ date: item.expectedDate, layer: "pipelinePhase2", amount: item.amount, projectName: item.projectName, jobNo: item.jobNo, label: item.label });
+      for (const item of m.pipelinePhase1Items) events.push({ date: item.expectedDate, layer: "pipelinePhase1", amount: item.amount, projectName: item.projectName, jobNo: item.jobNo, label: item.label });
+      for (const item of m.apItems) events.push({ date: item.expectedDate, layer: "ap", amount: item.amount, projectName: item.projectName, jobNo: item.jobNo, label: item.label });
+      if (m.cogsWon > 0) events.push({ date: `${mk}-15T00:00:00.000Z`, layer: "cogsWon", amount: m.cogsWon, projectName: "COGS (Won)", jobNo: null, label: null });
+      if (m.cogsPhase1 + m.cogsPhase2 + m.cogsPhase3 > 0) events.push({ date: `${mk}-15T00:00:00.000Z`, layer: "cogsPipeline", amount: m.cogsPhase1 + m.cogsPhase2 + m.cogsPhase3, projectName: "COGS (Pipeline)", jobNo: null, label: null });
+      if (m.overhead > 0) events.push({ date: `${mk}-15T00:00:00.000Z`, layer: "overhead", amount: m.overhead, projectName: "Overhead", jobNo: null, label: null });
+      if (m.vatReturn > 0) events.push({ date: `${mk}-15T00:00:00.000Z`, layer: "vatReturn", amount: m.vatReturn, projectName: "VAT Return", jobNo: null, label: null });
+    }
+    events.sort((a, b) => a.date.localeCompare(b.date));
+
     // ─── BUILD RESPONSE ─────────────────────────────────────
 
     // Round helper
@@ -507,6 +529,7 @@ export async function GET(request: Request) {
           },
         },
         months: monthlyData,
+        events,
       },
       { headers: CORS_HEADERS }
     );
