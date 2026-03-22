@@ -1086,12 +1086,8 @@ async function checkSetup(){
 }
 
 // ─── Init ───────────────────────────────────────────────────
-(async function init(){
-  const authed=await checkAuth();
-  if(!authed)return; // Wait for login
-  loadAll();
-  checkSetup();
-})();
+// Auth is handled by the parent page (page.tsx) — just load data directly
+loadAll();
 </script>
 </body>
 </html>
