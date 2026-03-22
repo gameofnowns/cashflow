@@ -197,6 +197,8 @@
   .row-cogs td{background:rgba(136,117,80,0.06);} .row-cogs td:first-child{background:rgba(136,117,80,0.06);}
   .row-vat td{background:rgba(143,154,143,0.06);} .row-vat td:first-child{background:rgba(143,154,143,0.06);}
   .row-oh td{background:rgba(247,229,223,0.15);} .row-oh td:first-child{background:rgba(247,229,223,0.15);}
+  .oh-cell:hover{background:rgba(254,99,55,0.08) !important;}
+  .oh-edit{width:70px;border:1px solid var(--orange);background:var(--bg);font-size:9px;font-weight:700;padding:2px 4px;text-align:right;font-family:var(--font);outline:none;}
   .row-out-total td{background:rgba(192,57,43,0.08);border-bottom:var(--grid);} .row-out-total td:first-child{background:rgba(192,57,43,0.08);}
   .row-net td{background:rgba(254,99,55,0.06);border-bottom:var(--grid);} .row-net td:first-child{background:rgba(254,99,55,0.06);}
   .row-cash td{background:rgba(26,24,20,0.06);border-top:2px solid var(--ink);}
@@ -353,7 +355,7 @@ function render(){
     <div class="r2-mode"><button class="r2-mode-btn ${MODE==='bars'?'active':''}" onclick="setMode('bars')">▮ BARS</button><button class="r2-mode-btn ${MODE==='stream'?'active':''}" onclick="setMode('stream')">〰 STREAM</button></div>
     <div class="r2-sep"></div>
     ${tb('weighted','Weighted','',T.weighted)}
-    <div class="r2-bal"><span>BAL</span><input id="bank-input" value="${Math.round(bank)}" onkeydown="if(event.key==='Enter')loadAll()"><button onclick="loadAll()">SET</button></div>`;
+    <div class="r2-bal"><span>BAL</span><input id="bank-input" value="${Math.round(bank)}" onkeydown="if(event.key==='Enter')loadAll()" placeholder="from Exact" title="Auto-loaded from Exact. Type to override."><button onclick="loadAll()">SET</button><span style="font-size:6px;color:${D.bankBalanceSource==='exact'?'#4a9e5c':'var(--dim)'};margin-left:4px">${D.bankBalanceSource==='exact'?'EXACT':'MANUAL'}</span></div>`;
 
   renderTicker(c,cb);
   renderPNL(c,cb); // Table first so chart can read column positions
@@ -413,6 +415,9 @@ function renderCashLine(el,c,cb,cols,zeroY,scale,W,H){
   const sy=zeroY-bank*scale,sx=cols[0].x-cols[0].w/2;
   const chartRight=cols[cols.length-1].x+cols[cols.length-1].w/2;
   const fyMidX=chartRight+(W-chartRight)/2;
+  // FY Total references December (end of financial year), not last month
+  const decPtIdx=c.reduce((last,m,i)=>m.month.endsWith('-12')?i:last,-1);
+  const fyPt=decPtIdx>=0?pts[decPtIdx]:pts[pts.length-1];
   const lp=pts[pts.length-1];
 
   // Main cash line path
@@ -426,26 +431,26 @@ function renderCashLine(el,c,cb,cols,zeroY,scale,W,H){
   // Data points (hollow circles)
   pts.forEach(p=>{svg+=`<circle cx="${p.x}" cy="${p.y}" r="5" fill="#EAE6DF" stroke="#1A1814" stroke-width="2"/>`;});
 
-  // FY Total zone: dashed continuation line from last point to FY zone
-  svg+=`<line x1="${lp.x}" y1="${lp.y}" x2="${chartRight}" y2="${lp.y}" stroke="#1A1814" stroke-width="2" stroke-dasharray="4,3" opacity="0.4"/>`;
+  // FY Total zone: dashed continuation line from December point to FY zone
+  svg+=`<line x1="${fyPt.x}" y1="${fyPt.y}" x2="${chartRight}" y2="${fyPt.y}" stroke="#1A1814" stroke-width="2" stroke-dasharray="4,3" opacity="0.4"/>`;
 
-  // Orange horizontal bar in the FY Total zone at closing cash position
+  // Orange horizontal bar in the FY Total zone at December cash position
   const barHalfW=(W-chartRight)/2-8;
-  svg+=`<line x1="${chartRight+8}" y1="${lp.y}" x2="${W-8}" y2="${lp.y}" stroke="#FE6337" stroke-width="3.5" stroke-linecap="butt"/>`;
+  svg+=`<line x1="${chartRight+8}" y1="${fyPt.y}" x2="${W-8}" y2="${fyPt.y}" stroke="#FE6337" stroke-width="3.5" stroke-linecap="butt"/>`;
 
   // Orange endpoint dot
-  svg+=`<circle cx="${fyMidX}" cy="${lp.y}" r="5" fill="#FE6337" stroke="#EAE6DF" stroke-width="2"/>`;
+  svg+=`<circle cx="${fyMidX}" cy="${fyPt.y}" r="5" fill="#FE6337" stroke="#EAE6DF" stroke-width="2"/>`;
 
   // Zero reference line in FY zone
   svg+=`<line x1="${chartRight+4}" y1="${zeroY}" x2="${W-4}" y2="${zeroY}" stroke="#A09890" stroke-width="0.5" stroke-dasharray="2,2" opacity="0.5"/>`;
 
   // FY closing value label (centered in zone, above the orange bar)
-  const labelY=lp.y<zeroY?lp.y-12:lp.y+16;
-  const valColor=lp.cash<0?'#BD6A55':'#FE6337';
-  svg+=`<text x="${fyMidX}" y="${labelY}" text-anchor="middle" font-size="11" font-weight="700" fill="${valColor}" font-family="var(--font)" letter-spacing="1">${lp.cash<0?'- ':''}EUR ${K(Math.abs(lp.cash))}</text>`;
+  const labelY=fyPt.y<zeroY?fyPt.y-12:fyPt.y+16;
+  const valColor=fyPt.cash<0?'#BD6A55':'#FE6337';
+  svg+=`<text x="${fyMidX}" y="${labelY}" text-anchor="middle" font-size="11" font-weight="700" fill="${valColor}" font-family="var(--font)" letter-spacing="1">${fyPt.cash<0?'- ':''}EUR ${K(Math.abs(fyPt.cash))}</text>`;
 
   // Small "FY CLOSE" label
-  const subY=lp.y<zeroY?lp.y-22:lp.y+26;
+  const subY=fyPt.y<zeroY?fyPt.y-22:fyPt.y+26;
   svg+=`<text x="${fyMidX}" y="${subY}" text-anchor="middle" font-size="6" font-weight="700" fill="#A09890" font-family="var(--font)" letter-spacing="2">FY CLOSE</text>`;
 
   svg+=`</svg>`;
@@ -830,21 +835,32 @@ function renderPNL(c,cb){
     {l:'AP',fn:m=>-m.ap,cls:'row-ap'},
     {l:'COGS',fn:m=>-(m.cogsWon+m.cogsPipeline),cls:'row-cogs'},
     {l:'VAT Returns',fn:m=>m.vat,cls:'row-vat'},
-    {l:'Overhead',fn:m=>-m.overhead,cls:'row-oh'},
+    {l:'Overhead',fn:m=>-m.overhead,cls:'row-oh',editable:true},
     {l:'Total Outflow',fn:m=>-m.outflow,cls:'row-out-total'},
     {l:'Net',fn:(m,i)=>m.net,cls:'row-net'},
   ];
   let h='<thead><tr><th></th>';
   c.forEach(m=>{const e=EXP===m.month?' exp':'';h+=`<th class="mh${e}" onclick="drill('${m.month}')">${sm(m.month)}</th>`;});
   h+='<th class="th">FY Total</th></tr></thead><tbody>';
+  // FY Total = sum only through last December in the 12-month window
+  const decIdx=c.reduce((last,m,i)=>m.month.endsWith('-12')?i:last,-1);
+  const fyEnd=decIdx>=0?decIdx:c.length-1;
   rows.forEach(r=>{
     h+=`<tr class="${r.cls}"><td>${r.l}</td>`;
-    c.forEach((m,i)=>{const val=r.fn(m,i);h+=`<td class="${r.fc?'fc':''}">${v(val,r.fc)}</td>`;});
-    const t=c.reduce((s,m,i)=>s+r.fn(m,i),0);h+=`<td>${v(t,r.fc)}</td></tr>`;
+    c.forEach((m,i)=>{
+      if(r.editable){
+        // Editable overhead cell — click to edit
+        const amt=m.overhead||0;
+        h+=`<td class="oh-cell" data-month="${m.month}" onclick="editOverhead(this,'${m.month}')" style="cursor:pointer;position:relative" title="Click to edit">- EUR ${amt>0?amt.toLocaleString('de-DE',{maximumFractionDigits:0}):'0'}</td>`;
+      } else {
+        const val=r.fn(m,i);h+=`<td class="${r.fc?'fc':''}">${v(val,r.fc)}</td>`;
+      }
+    });
+    const t=c.slice(0,fyEnd+1).reduce((s,m,i)=>s+r.fn(m,i),0);h+=`<td>${v(t,r.fc)}</td></tr>`;
   });
   h+=`<tr class="row-cash"><td>Cash Position</td>`;
   cb.forEach(val=>{h+=`<td class="${val<0?'cell-neg':''}">${EUR(val)}</td>`;});
-  h+=`<td class="${cb[cb.length-1]<0?'cell-neg':''}">${EUR(cb[cb.length-1])}</td></tr>`;
+  h+=`<td class="${cb[fyEnd]<0?'cell-neg':''}">${EUR(cb[fyEnd])}</td></tr>`;
   h+='</tbody>';tbl.innerHTML=h;
 }
 
@@ -903,6 +919,39 @@ window.addEventListener('keydown',(e)=>{
   if(e.key==='Escape')collapseChat();
   if(e.key==='/'&&e.target.tagName!=='INPUT'){e.preventDefault();document.getElementById('cmd').focus();}
 });
+
+// ─── Editable Overhead ──────────────────────────────────────
+function editOverhead(cell,month){
+  const current=Math.abs(parseFloat(cell.textContent.replace(/[^0-9.,\-]/g,'').replace(/\./g,'').replace(',','.'))||0);
+  const input=document.createElement('input');
+  input.className='oh-edit';
+  input.type='number';
+  input.value=current>0?Math.round(current):'';
+  input.placeholder='EUR';
+  cell.innerHTML='';
+  cell.appendChild(input);
+  input.focus();
+  input.select();
+
+  const save=async()=>{
+    const val=parseFloat(input.value)||0;
+    try{
+      await fetch(`${API}/api/overhead`,{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        credentials:'include',
+        body:JSON.stringify({month:month+'-01',amount:val})
+      });
+    }catch(e){console.error('Failed to save overhead:',e);}
+    loadAll(); // Refresh everything
+  };
+
+  input.addEventListener('blur',save);
+  input.addEventListener('keydown',(e)=>{
+    if(e.key==='Enter'){input.blur();}
+    if(e.key==='Escape'){loadAll();} // Cancel
+  });
+}
 
 // ─── Data loading ───────────────────────────────────────────
 async function loadAll(){

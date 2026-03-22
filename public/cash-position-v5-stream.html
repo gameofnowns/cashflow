@@ -197,6 +197,8 @@
   .row-cogs td{background:rgba(136,117,80,0.06);} .row-cogs td:first-child{background:rgba(136,117,80,0.06);}
   .row-vat td{background:rgba(143,154,143,0.06);} .row-vat td:first-child{background:rgba(143,154,143,0.06);}
   .row-oh td{background:rgba(247,229,223,0.15);} .row-oh td:first-child{background:rgba(247,229,223,0.15);}
+  .oh-cell:hover{background:rgba(254,99,55,0.08) !important;}
+  .oh-edit{width:70px;border:1px solid var(--orange);background:var(--bg);font-size:9px;font-weight:700;padding:2px 4px;text-align:right;font-family:var(--font);outline:none;}
   .row-out-total td{background:rgba(192,57,43,0.08);border-bottom:var(--grid);} .row-out-total td:first-child{background:rgba(192,57,43,0.08);}
   .row-net td{background:rgba(254,99,55,0.06);border-bottom:var(--grid);} .row-net td:first-child{background:rgba(254,99,55,0.06);}
   .row-cash td{background:rgba(26,24,20,0.06);border-top:2px solid var(--ink);}
@@ -353,7 +355,7 @@ function render(){
     <div class="r2-mode"><button class="r2-mode-btn ${MODE==='bars'?'active':''}" onclick="setMode('bars')">▮ BARS</button><button class="r2-mode-btn ${MODE==='stream'?'active':''}" onclick="setMode('stream')">〰 STREAM</button></div>
     <div class="r2-sep"></div>
     ${tb('weighted','Weighted','',T.weighted)}
-    <div class="r2-bal"><span>BAL</span><input id="bank-input" value="${Math.round(bank)}" onkeydown="if(event.key==='Enter')loadAll()"><button onclick="loadAll()">SET</button></div>`;
+    <div class="r2-bal"><span>BAL</span><input id="bank-input" value="${Math.round(bank)}" onkeydown="if(event.key==='Enter')loadAll()" placeholder="from Exact" title="Auto-loaded from Exact. Type to override."><button onclick="loadAll()">SET</button><span style="font-size:6px;color:${D.bankBalanceSource==='exact'?'#4a9e5c':'var(--dim)'};margin-left:4px">${D.bankBalanceSource==='exact'?'EXACT':'MANUAL'}</span></div>`;
 
   renderTicker(c,cb);
   renderPNL(c,cb); // Table first so chart can read column positions
@@ -833,7 +835,7 @@ function renderPNL(c,cb){
     {l:'AP',fn:m=>-m.ap,cls:'row-ap'},
     {l:'COGS',fn:m=>-(m.cogsWon+m.cogsPipeline),cls:'row-cogs'},
     {l:'VAT Returns',fn:m=>m.vat,cls:'row-vat'},
-    {l:'Overhead',fn:m=>-m.overhead,cls:'row-oh'},
+    {l:'Overhead',fn:m=>-m.overhead,cls:'row-oh',editable:true},
     {l:'Total Outflow',fn:m=>-m.outflow,cls:'row-out-total'},
     {l:'Net',fn:(m,i)=>m.net,cls:'row-net'},
   ];
@@ -845,7 +847,15 @@ function renderPNL(c,cb){
   const fyEnd=decIdx>=0?decIdx:c.length-1;
   rows.forEach(r=>{
     h+=`<tr class="${r.cls}"><td>${r.l}</td>`;
-    c.forEach((m,i)=>{const val=r.fn(m,i);h+=`<td class="${r.fc?'fc':''}">${v(val,r.fc)}</td>`;});
+    c.forEach((m,i)=>{
+      if(r.editable){
+        // Editable overhead cell — click to edit
+        const amt=m.overhead||0;
+        h+=`<td class="oh-cell" data-month="${m.month}" onclick="editOverhead(this,'${m.month}')" style="cursor:pointer;position:relative" title="Click to edit">- EUR ${amt>0?amt.toLocaleString('de-DE',{maximumFractionDigits:0}):'0'}</td>`;
+      } else {
+        const val=r.fn(m,i);h+=`<td class="${r.fc?'fc':''}">${v(val,r.fc)}</td>`;
+      }
+    });
     const t=c.slice(0,fyEnd+1).reduce((s,m,i)=>s+r.fn(m,i),0);h+=`<td>${v(t,r.fc)}</td></tr>`;
   });
   h+=`<tr class="row-cash"><td>Cash Position</td>`;
@@ -909,6 +919,39 @@ window.addEventListener('keydown',(e)=>{
   if(e.key==='Escape')collapseChat();
   if(e.key==='/'&&e.target.tagName!=='INPUT'){e.preventDefault();document.getElementById('cmd').focus();}
 });
+
+// ─── Editable Overhead ──────────────────────────────────────
+function editOverhead(cell,month){
+  const current=Math.abs(parseFloat(cell.textContent.replace(/[^0-9.,\-]/g,'').replace(/\./g,'').replace(',','.'))||0);
+  const input=document.createElement('input');
+  input.className='oh-edit';
+  input.type='number';
+  input.value=current>0?Math.round(current):'';
+  input.placeholder='EUR';
+  cell.innerHTML='';
+  cell.appendChild(input);
+  input.focus();
+  input.select();
+
+  const save=async()=>{
+    const val=parseFloat(input.value)||0;
+    try{
+      await fetch(`${API}/api/overhead`,{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        credentials:'include',
+        body:JSON.stringify({month:month+'-01',amount:val})
+      });
+    }catch(e){console.error('Failed to save overhead:',e);}
+    loadAll(); // Refresh everything
+  };
+
+  input.addEventListener('blur',save);
+  input.addEventListener('keydown',(e)=>{
+    if(e.key==='Enter'){input.blur();}
+    if(e.key==='Escape'){loadAll();} // Cancel
+  });
+}
 
 // ─── Data loading ───────────────────────────────────────────
 async function loadAll(){
