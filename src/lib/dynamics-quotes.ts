@@ -92,6 +92,15 @@ export const SHIPPING_MAP: Record<number, string> = {
   211680004: "Air (35%)",
 };
 
+/** Estimated shipping transit time in weeks by shipping type */
+export const SHIPPING_WEEKS: Record<number, number> = {
+  211680000: 0,  // Ex works — client collects, no transit
+  211680001: 2,  // Standard — road delivery ~2 weeks
+  211680002: 2,  // Pre Assembled — similar to standard
+  211680003: 4,  // Sea — ocean freight ~4 weeks
+  211680004: 1,  // Air — air freight ~1 week
+};
+
 // ─── Token & Fetch ──────────────────────────────────────────
 
 export async function getToken(): Promise<string> {
@@ -248,9 +257,11 @@ export function computeMilestoneDate(
   trigger: string,
   quoteDate: Date,
   designWeeks: number,
-  mfgWeeks: number
+  mfgWeeks: number,
+  shippingWeeks: number = 2
 ): { date: Date; reasoning: string } {
   const totalWeeks = designWeeks + mfgWeeks;
+  const dispatchWeeks = totalWeeks + shippingWeeks; // production + shipping = dispatch
 
   switch (trigger) {
     case "start":
@@ -283,13 +294,13 @@ export function computeMilestoneDate(
       };
     case "NET 30":
       return {
-        date: addWeeks(quoteDate, totalWeeks + 4),
-        reasoning: `Lead time ${totalWeeks}wk + 30 days`,
+        date: addWeeks(quoteDate, dispatchWeeks + 4),
+        reasoning: `Lead ${totalWeeks}wk + ${shippingWeeks}wk shipping + 30 days`,
       };
     case "NET 60":
       return {
-        date: addWeeks(quoteDate, totalWeeks + 9),
-        reasoning: `Lead time ${totalWeeks}wk + 60 days`,
+        date: addWeeks(quoteDate, dispatchWeeks + 9),
+        reasoning: `Lead ${totalWeeks}wk + ${shippingWeeks}wk shipping + 60 days`,
       };
     default:
       return {
@@ -321,6 +332,7 @@ export interface DecodedQuote {
   subtotal: number | null;
   crating: string | null;
   shipping: string | null;
+  shippingWeeks: number;
   milestones: ComputedMilestone[];
   jobNo: string | null;
 }
@@ -405,13 +417,15 @@ export function decodeQuote(
   const milestoneDefs = parsePaymentTermsIntoMilestones(termsToUse);
   const dw = designWeeks ?? 0;
   const mw = mfgWeeks ?? 8;
+  const sw = q ? (SHIPPING_WEEKS[q.nown_os_shippingtype] ?? 2) : 2;
 
   const milestones = milestoneDefs.map((m) => {
     const { date, reasoning } = computeMilestoneDate(
       m.trigger,
       anchorDate,
       dw,
-      mw
+      mw,
+      sw
     );
     return {
       label: m.label,
@@ -452,6 +466,7 @@ export function decodeQuote(
     subtotal: q?.nown_mon_subtotal || null,
     crating: q ? CRATING_MAP[q.nown_os_cratintype] || null : null,
     shipping: q ? SHIPPING_MAP[q.nown_os_shippingtype] || null : null,
+    shippingWeeks: q ? (SHIPPING_WEEKS[q.nown_os_shippingtype] ?? 2) : 2, // default 2 weeks if unknown
     milestones,
     jobNo,
   };

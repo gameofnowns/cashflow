@@ -36,6 +36,7 @@
   .r1-ts{font-size:6.5px;color:var(--ghost);padding:0 8px;}
   .r1-btn{font-size:7px;padding:4px 10px;background:transparent;border:var(--grid);color:var(--dim);cursor:pointer;letter-spacing:0.5px;margin-right:8px;}
   .r1-btn:hover{border-color:var(--orange);color:var(--orange);}
+  .r1-btn.private-active{background:var(--ink);color:var(--bg);border-color:var(--ink);}
 
   /* ─── ROW 2 ────────────────────────────────────────────── */
   .r2{display:flex;align-items:center;gap:6px;padding:8px 18px;border-bottom:var(--grid);flex-shrink:0;flex-wrap:wrap;}
@@ -254,6 +255,7 @@
   <div class="r1-metrics" id="metrics"></div>
   <div class="r1-syncs" id="syncs"></div>
   <span class="r1-ts" id="ts"></span>
+  <button class="r1-btn" id="private-btn" onclick="togglePrivate()" title="Hide financial values">🔒</button>
   <button class="r1-btn" onclick="loadAll()">REFRESH</button>
 </div>
 
@@ -288,8 +290,10 @@
 
 <script>
 const API=window.location.origin;
-const EUR=(n)=>{if(n==null||isNaN(n))return'—';const a=Math.abs(n);const f=a.toLocaleString('de-DE',{minimumFractionDigits:0,maximumFractionDigits:0});return(n<0?'- ':'')+'EUR '+f;};
-const K=(n)=>{const a=Math.abs(n);const s=n<0?'-':'';if(a>=1e6)return s+(a/1e6).toFixed(1)+'M';if(a>=1e3)return s+Math.round(a/1e3)+'K';return s+Math.round(a);};
+let PRIVATE=localStorage.getItem('nown-private')==='true';
+function togglePrivate(){PRIVATE=!PRIVATE;localStorage.setItem('nown-private',PRIVATE);render();}
+const EUR=(n)=>{if(PRIVATE)return'•••';if(n==null||isNaN(n))return'—';const a=Math.abs(n);const f=a.toLocaleString('de-DE',{minimumFractionDigits:0,maximumFractionDigits:0});return(n<0?'- ':'')+'EUR '+f;};
+const K=(n)=>{if(PRIVATE)return'•••';const a=Math.abs(n);const s=n<0?'-':'';if(a>=1e6)return s+(a/1e6).toFixed(1)+'M';if(a>=1e3)return s+Math.round(a/1e3)+'K';return s+Math.round(a);};
 const sm=(mk)=>{const[y,mo]=mk.split('-');return['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(mo)-1]+' '+y.slice(2);};
 
 let D=null,EXP=null;
@@ -325,6 +329,9 @@ function compute(){
 
 function render(){
   if(!D)return;
+  // Update private mode button
+  const pb=document.getElementById('private-btn');
+  if(pb){pb.className=PRIVATE?'r1-btn private-active':'r1-btn';pb.textContent=PRIVATE?'🔓':'🔒';}
   const c=compute();
   let cash=D.bankBalance;const cb=c.map(m=>{cash+=m.net;return cash;});
   const tIn=c.reduce((s,m)=>s+m.inflow,0),tOut=c.reduce((s,m)=>s+m.outflow,0);

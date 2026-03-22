@@ -133,7 +133,8 @@ function estimateMilestoneDate(
   trigger: string,
   project: ParsedProject,
   dynamicsDesignWeeks?: number | null,
-  dynamicsMfgWeeks?: number | null
+  dynamicsMfgWeeks?: number | null,
+  shippingWeeks: number = 2
 ): Date {
   const now = new Date();
   const designWeeks = dynamicsDesignWeeks ?? Math.round((project.leadtimeWeeks || 12) * 0.4);
@@ -184,15 +185,15 @@ function estimateMilestoneDate(
     }
 
     case "NET 30": {
-      // 30 days after dispatch (pre-ship + ~4 weeks)
-      const preShipDate = estimateMilestoneDate("pre-ship", project, dynamicsDesignWeeks, dynamicsMfgWeeks);
-      return addWeeks(preShipDate, 4);
+      // 30 days after dispatch: pre-ship + shipping transit + 30 days
+      const preShipDate = estimateMilestoneDate("pre-ship", project, dynamicsDesignWeeks, dynamicsMfgWeeks, shippingWeeks);
+      return addWeeks(preShipDate, shippingWeeks + 4);
     }
 
     case "NET 60": {
-      // 60 days after dispatch (pre-ship + ~9 weeks)
-      const preShipDate = estimateMilestoneDate("pre-ship", project, dynamicsDesignWeeks, dynamicsMfgWeeks);
-      return addWeeks(preShipDate, 9);
+      // 60 days after dispatch: pre-ship + shipping transit + 60 days
+      const preShipDate = estimateMilestoneDate("pre-ship", project, dynamicsDesignWeeks, dynamicsMfgWeeks, shippingWeeks);
+      return addWeeks(preShipDate, shippingWeeks + 9);
     }
 
     default: {
@@ -286,6 +287,7 @@ export async function syncClickUp(): Promise<SyncResult> {
       let resolvedPaymentTerms: string | null = parsed.paymentTerms;
       let dynamicsDesignWeeks: number | null = null;
       let dynamicsMfgWeeks: number | null = null;
+      let dynamicsShippingWeeks: number = 2; // default
 
       if (dynamicsData) {
         const decoded = decodeQuote(
@@ -300,6 +302,7 @@ export async function syncClickUp(): Promise<SyncResult> {
           resolvedPaymentTerms = decoded.paymentTermsResolved;
           dynamicsDesignWeeks = decoded.designWeeks;
           dynamicsMfgWeeks = decoded.manufacturingWeeks;
+          dynamicsShippingWeeks = decoded.shippingWeeks;
           result.dynamicsEnriched!++;
         }
       }
@@ -407,12 +410,13 @@ export async function syncClickUp(): Promise<SyncResult> {
             status = priorInvoiced.status;
             invoiceId = priorInvoiced.invoiceId;
           } else {
-            // Estimate date from ClickUp timing, using Dynamics trigger
+            // Estimate date from ClickUp timing, using Dynamics trigger + shipping
             expectedDate = estimateMilestoneDate(
               dms.trigger,
               parsed,
               dynamicsDesignWeeks,
-              dynamicsMfgWeeks
+              dynamicsMfgWeeks,
+              dynamicsShippingWeeks
             );
             status = "pending";
           }
