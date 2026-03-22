@@ -275,45 +275,47 @@ export async function fetchPayables(): Promise<{ total: number; items: ExactPaya
  * Uses the financial reporting balance endpoint.
  */
 export async function fetchBankBalance(): Promise<number> {
-  // NOWN bank/liquid asset GL accounts (confirmed from Exact):
-  // 1000 = ING Creditcard
-  // 1100 = ING EUR Operations (NL91 INGB 0009 2651 80)
-  // 1101 = JP Morgan Chase USD
-  // 1103 = ING Bank GBP (NL02 INGB 0020 2402 95)
-  // 1104 = Pleo Wallet
-  // Plus NL09 account and savings — need to find their GL codes
-  //
-  // ReportingBalance gives period MOVEMENTS, not running balance.
-  // Cumulative balance = sum of ALL movements across ALL years.
-  // MUST paginate — each account can have 60+ entries across years.
+  // Use the BalanceByGLAccount endpoint for an accurate current balance.
+  // Fall back to ReportingBalance sum if that fails.
+  // GL accounts 1000-1199 = bank/cash/liquid assets
 
   try {
-    // Get all GL accounts in the 10xx-11xx range (bank/cash/liquid assets)
+    // Approach 1: Use financial/GLAccountBalances (gives current balance directly)
+    try {
+      const balances = await exactGetAll<{ GLAccountCode: string; Balance: number }>(
+        "/financial/GLAccountBalances?$select=GLAccountCode,Balance&$filter=startswith(GLAccountCode,'10') or startswith(GLAccountCode,'11')"
+      );
+      const bankBalances = balances.filter(b => {
+        const code = parseInt(b.GLAccountCode);
+        return code >= 1000 && code <= 1199;
+      });
+      if (bankBalances.length > 0) {
+        return bankBalances.reduce((sum, b) => sum + (b.Balance || 0), 0);
+      }
+    } catch {
+      // GLAccountBalances not available — fall back
+    }
+
+    // Approach 2: Use ReportingBalance with cumulative sum across all periods
     const glAccounts = await exactGetAll<{ Code: string; Description: string }>(
       "/financial/GLAccounts?$select=Code,Description&$filter=startswith(Code,'10') or startswith(Code,'11')"
     );
-
-    // Filter to bank/cash accounts only (10xx and 11xx, exclude 12xx debtors etc.)
     const bankAccounts = glAccounts.filter(a => {
       const code = parseInt(a.Code);
       return code >= 1000 && code <= 1199;
     });
-
     if (bankAccounts.length === 0) return 0;
 
     let total = 0;
     for (const account of bankAccounts) {
       try {
-        // PAGINATE through all reporting balance entries for this account
         const balances = await exactGetAll<{ Amount: number }>(
           `/financial/ReportingBalance?$select=Amount&$filter=GLAccountCode eq '${account.Code}'`
         );
         for (const b of balances) {
           total += b.Amount || 0;
         }
-      } catch {
-        // Skip this account if query fails
-      }
+      } catch { /* skip */ }
     }
     return total;
   } catch {

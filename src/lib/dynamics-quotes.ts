@@ -165,7 +165,13 @@ export function parsePaymentTermsIntoMilestones(
   termsText: string
 ): MilestoneDef[] {
   const milestones: MilestoneDef[] = [];
-  const parts = termsText.split(",").map((s) => s.trim());
+  // Split on semicolons first (line-item format), then commas
+  const rawParts = termsText.includes(";")
+    ? termsText.split(";").map((s) => s.trim())
+    : termsText.split(",").map((s) => s.trim());
+
+  // Filter to only parts that contain a percentage
+  const parts = rawParts.filter((p) => /\d+%/.test(p));
 
   for (let i = 0; i < parts.length; i++) {
     const part = parts[i];
@@ -177,11 +183,14 @@ export function parsePaymentTermsIntoMilestones(
     let trigger = "start";
     if (rest.includes("net 60")) trigger = "NET 60";
     else if (rest.includes("net 30")) trigger = "NET 30";
-    else if (rest.includes("pre-ship") || rest.includes("preship"))
+    else if (rest.includes("pre-ship") || rest.includes("pre ship") || rest.includes("preship") || rest.includes("shipment"))
       trigger = "pre-ship";
     else if (rest.includes("mid-manufacture")) trigger = "mid-manufacture";
-    else if (rest.includes("approval")) trigger = "approval";
+    else if (rest.includes("approval") || rest.includes("drawings"))
+      trigger = "approval";
     else if (rest.includes("shops")) trigger = "shops";
+    else if (rest.includes("dispatch") || rest.includes("balance"))
+      trigger = "NET 30";
     else if (
       rest.includes("start") ||
       rest.includes("manufacture") ||
@@ -204,6 +213,31 @@ export function parsePaymentTermsIntoMilestones(
   }
 
   return milestones;
+}
+
+/**
+ * Extract payment terms text from quote line items.
+ * Looks for a line item named "Payment Terms" (€0 info line)
+ * and parses the description for percentage-based terms.
+ */
+export function extractPaymentTermsFromLineItems(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  lineItems: Record<string, any>[]
+): string | null {
+  if (!lineItems || !Array.isArray(lineItems)) return null;
+
+  for (const li of lineItems) {
+    const name = (li.quotedetailname || li.productdescription || "").toLowerCase();
+    if (name.includes("payment term")) {
+      const desc = li.description || "";
+      // Check it actually contains percentages
+      if (/\d+%/.test(desc)) {
+        // Strip the leading "Payment Terms - " prefix if present
+        return desc.replace(/^payment\s+terms\s*[-–—:]\s*/i, "").trim();
+      }
+    }
+  }
+  return null;
 }
 
 export function addWeeks(date: Date, weeks: number): Date {
@@ -281,6 +315,8 @@ export interface DecodedQuote {
   paymentTermsCode: number | null;
   paymentTermsText: string | null;
   manualPaymentTerms: string | null;
+  paymentTermsSource: string;
+  paymentTermsResolved: string;
   totalPrice: number;
   subtotal: number | null;
   crating: string | null;
@@ -302,7 +338,9 @@ export function decodeQuote(
     estimatedclosedate?: string;
   },
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  q: Record<string, any> | null
+  q: Record<string, any> | null,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  quoteLineItems?: Record<string, any>[] | null
 ): DecodedQuote {
   const projectType = q
     ? PROJECT_TYPE_MAP[q.nown_os_projecttype] || null
@@ -333,12 +371,49 @@ export function decodeQuote(
         ? new Date(q.createdon)
         : new Date();
 
-  // Determine payment terms
-  const termsToUse = q
-    ? paymentTermsText === "Manual Entry"
-      ? q.nown_manualentrypaymentterms || "100% DUE"
-      : paymentTermsText || "50% manufacture, 50% pre-ship"
-    : "50% manufacture, 50% pre-ship";
+  // Determine payment terms — resolution chain:
+  // 1. Standard payment terms code (header dropdown)
+  // 2. Manual payment terms text (if code is "Manual Entry")
+  // 3. Quote line items (look for a "Payment Terms" product line)
+  // 4. Default fallback: 50/50
+  let termsToUse = "50% manufacture, 50% pre-ship";
+  let termsSource = "default";
+
+  if (q) {
+    if (paymentTermsText && paymentTermsText !== "Manual Entry") {
+      // 1. Standard payment terms from header dropdown
+      termsToUse = paymentTermsText;
+      termsSource = "standard";
+    } else if (paymentTermsText === "Manual Entry") {
+      const manual = q.nown_manualentrypaymentterms || "";
+      if (manual && !manual.toLowerCase().includes("see line") && /\d+%/.test(manual)) {
+        // 2. Manual terms field has actual terms
+        termsToUse = manual;
+        termsSource = "manual";
+      } else {
+        // 3. Manual says "see line in quote" or similar — check line items
+        const lineItemTerms = quoteLineItems
+          ? extractPaymentTermsFromLineItems(quoteLineItems)
+          : null;
+        if (lineItemTerms) {
+          termsToUse = lineItemTerms;
+          termsSource = "lineItem";
+        } else {
+          termsToUse = "100% DUE";
+          termsSource = "manual-fallback";
+        }
+      }
+    } else {
+      // No payment terms code at all — try line items before defaulting
+      const lineItemTerms = quoteLineItems
+        ? extractPaymentTermsFromLineItems(quoteLineItems)
+        : null;
+      if (lineItemTerms) {
+        termsToUse = lineItemTerms;
+        termsSource = "lineItem";
+      }
+    }
+  }
 
   const milestoneDefs = parsePaymentTermsIntoMilestones(termsToUse);
   const dw = designWeeks ?? 0;
@@ -384,6 +459,8 @@ export function decodeQuote(
     paymentTermsCode: q?.paymenttermscode ?? null,
     paymentTermsText,
     manualPaymentTerms: q?.nown_manualentrypaymentterms || null,
+    paymentTermsSource: termsSource,
+    paymentTermsResolved: termsToUse,
     totalPrice,
     subtotal: q?.nown_mon_subtotal || null,
     crating: q ? CRATING_MAP[q.nown_os_cratintype] || null : null,
