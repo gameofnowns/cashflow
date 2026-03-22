@@ -175,10 +175,10 @@ function estimateMilestoneDate(
 
     case "pre-ship": {
       // Production complete, ready to ship
-      if (project.productionEta) return project.productionEta;
-      if (project.approvedShopsDate) return addWeeks(project.approvedShopsDate, productionWeeks);
-      if (project.dueDateShops) return addWeeks(project.dueDateShops, 2 + productionWeeks);
-      if (project.quoteDate && project.leadtimeWeeks) return addWeeks(project.quoteDate, project.leadtimeWeeks);
+      // productionEta = when production STARTS, not finishes — add mfg weeks
+      if (project.productionEta) return addWeeks(project.productionEta, mfgWeeks);
+      if (project.approvedShopsDate) return addWeeks(project.approvedShopsDate, mfgWeeks);
+      if (project.dueDateShops) return addWeeks(project.dueDateShops, 2 + mfgWeeks);
       if (project.quoteDate) return addWeeks(project.quoteDate, designWeeks + mfgWeeks);
       return new Date(now.getFullYear(), now.getMonth() + 4, 15);
     }
