@@ -197,6 +197,7 @@
   .row-cogs td{background:rgba(136,117,80,0.06);} .row-cogs td:first-child{background:rgba(136,117,80,0.06);}
   .row-vat td{background:rgba(143,154,143,0.06);} .row-vat td:first-child{background:rgba(143,154,143,0.06);}
   .row-oh td{background:rgba(247,229,223,0.15);} .row-oh td:first-child{background:rgba(247,229,223,0.15);}
+  .row-capex td{background:rgba(107,101,96,0.06);} .row-capex td:first-child{background:rgba(107,101,96,0.06);}
   .oh-cell:hover{background:rgba(254,99,55,0.08) !important;}
   .oh-edit{width:70px;border:1px solid var(--orange);background:var(--bg);font-size:9px;font-weight:700;padding:2px 4px;text-align:right;font-family:var(--font);outline:none;}
   .row-out-total td{background:rgba(192,57,43,0.08);border-bottom:var(--grid);} .row-out-total td:first-child{background:rgba(192,57,43,0.08);}
@@ -293,10 +294,14 @@ const sm=(mk)=>{const[y,mo]=mk.split('-');return['Jan','Feb','Mar','Apr','May','
 
 let D=null,EXP=null;
 let MODE=localStorage.getItem('nown-chart-mode')||'stream';
-let T={currentAr:true,billableAr:true,phase3:true,ap:true,cogsWon:true,cogsPipeline:true,vat:true,overhead:true,weighted:false};
+let T={currentAr:true,billableAr:true,phase3:true,ap:true,cogsWon:true,cogsPipeline:true,vat:true,overhead:true,capex:true,weighted:false};
+
+// CapEx manual entries (stored in localStorage)
+let CAPEX=JSON.parse(localStorage.getItem('nown-capex')||'{}');
+function saveCapex(){localStorage.setItem('nown-capex',JSON.stringify(CAPEX));}
 
 // Series colors — single source of truth
-const COLORS={currentAr:'#82D780',billableAr:'#0086D5',committed:'#D8E1EB',vat:'#8F9A8F',ap:'#C0392B',cogsWon:'#887550',cogsPipeline:'#BD6A55',overhead:'#F7E5DF'};
+const COLORS={currentAr:'#82D780',billableAr:'#0086D5',committed:'#D8E1EB',vat:'#8F9A8F',ap:'#C0392B',cogsWon:'#887550',cogsPipeline:'#BD6A55',overhead:'#F7E5DF',capex:'#6B6560'};
 
 function setMode(m){MODE=m;localStorage.setItem('nown-chart-mode',m);render();}
 function tog(id){T[id]=!T[id];render();}
@@ -312,8 +317,9 @@ function compute(){
     const cW=T.cogsWon?m.cogsWon:0;
     let cP=0;if(T.cogsPipeline&&T.phase3)cP=w?m.cogsPhase3*0.9:m.cogsPhase3;
     const oh=T.overhead?m.overhead:0;
-    const inf=cAr+bAr+p3+vat,out=ap+cW+cP+oh;
-    return{month:m.month,currentAr:cAr,billableAr:bAr,committed:p3,ap,cogsWon:cW,cogsPipeline:cP,vat,overhead:oh,inflow:inf,outflow:out,net:inf-out,_:m};
+    const cx=T.capex?(CAPEX[m.month]||0):0;
+    const inf=cAr+bAr+p3+vat,out=ap+cW+cP+oh+cx;
+    return{month:m.month,currentAr:cAr,billableAr:bAr,committed:p3,ap,cogsWon:cW,cogsPipeline:cP,vat,overhead:oh,capex:cx,inflow:inf,outflow:out,net:inf-out,_:m};
   });
 }
 
@@ -351,6 +357,7 @@ function render(){
     ${tb('cogsWon','COGS','#887550',T.cogsWon)}
     ${tb('overhead','OH','#F7E5DF',T.overhead)}
     ${tb('vat','VAT','#8F9A8F',T.vat)}
+    ${tb('capex','CapEx','#6B6560',T.capex)}
     <div class="r2-sep"></div>
     <div class="r2-mode"><button class="r2-mode-btn ${MODE==='bars'?'active':''}" onclick="setMode('bars')">▮ BARS</button><button class="r2-mode-btn ${MODE==='stream'?'active':''}" onclick="setMode('stream')">〰 STREAM</button></div>
     <div class="r2-sep"></div>
@@ -473,7 +480,7 @@ function renderBars(c,cb){
     const x=cols[i].x;
     [{v:m.currentAr,c:'#82D780'},{v:m.billableAr,c:'#0086D5'},{v:m.committed,c:'#D8E1EB'},{v:m.vat,c:'#8F9A8F'}].filter(p=>p.v>0).reduce((cum,p)=>{
       const h=p.v*scale;el.innerHTML+=`<div class="bar-seg" style="left:${x-bw/2}px;top:${zeroY-cum-h}px;width:${bw}px;height:${h}px;background:${p.c};border:1px solid var(--ink)" title="${EUR(p.v)}"></div>`;return cum+h;},0);
-    [{v:m.ap,c:'#C0392B'},{v:m.cogsWon,c:'#887550'},{v:m.cogsPipeline,c:'#BD6A55'},{v:m.overhead,c:'#F7E5DF'}].filter(p=>p.v>0).reduce((cum,p)=>{
+    [{v:m.ap,c:'#C0392B'},{v:m.cogsWon,c:'#887550'},{v:m.cogsPipeline,c:'#BD6A55'},{v:m.overhead,c:'#F7E5DF'},{v:m.capex,c:'#6B6560'}].filter(p=>p.v>0).reduce((cum,p)=>{
       const h=p.v*scale;el.innerHTML+=`<div class="bar-seg" style="left:${x-bw/2}px;top:${zeroY+cum}px;width:${bw}px;height:${h}px;background:${p.c};border:1px solid var(--ink)" title="${EUR(-p.v)}"></div>`;return cum+h;},0);
   });
 
@@ -486,10 +493,45 @@ function renderBars(c,cb){
 }
 
 // ─── STREAMGRAPH ────────────────────────────────────────────
-function bell(center,peak,width,res){
+const STREAM_RES=360; // 30 points per month — smooth enough for sharp asymmetry
+
+// Asymmetric Gaussian: steep rise on left, gradual decay on right
+function asymBell(center,peak,riseW,fallW,res){
   const curve=new Array(res).fill(0);
-  for(let i=0;i<res;i++){const t=i/res;const d=(t-center)/width;curve[i]=peak*Math.exp(-d*d*2.5);}
+  for(let i=0;i<res;i++){
+    const t=i/res;
+    const d=t-center;
+    if(d<=0){
+      curve[i]=peak*Math.exp(-(d*d)/(2*riseW*riseW));
+    } else {
+      curve[i]=peak*Math.exp(-(d*d)/(2*fallW*fallW));
+    }
+  }
   return curve;
+}
+
+// Width calculation per payment — returns {rise, fall}
+function getAsymWidths(layer,amount){
+  const abs=Math.abs(amount);
+  let base=abs>500000?0.012:abs>100000?0.008:0.005;
+  switch(layer){
+    case 'currentAr':   return{rise:base*0.3,fall:base*1.8};
+    case 'billableAr':  return{rise:base*0.4,fall:base*2.2};
+    case 'committed':   return{rise:base*0.5,fall:base*2.8};
+    case 'vat':         return{rise:base*0.4,fall:base*2.0};
+    case 'ap':          return{rise:base*0.25,fall:base*1.5};
+    case 'cogsWon':     return{rise:base*0.3,fall:base*2.0};
+    case 'cogsPipeline':return{rise:base*0.3,fall:base*2.0};
+    case 'overhead':    return{rise:base*0.5,fall:base*2.5};
+    case 'capex':       return{rise:base*0.3,fall:base*1.5};
+    default:            return{rise:base*0.4,fall:base*2.0};
+  }
+}
+
+// Legacy symmetric bell for backward compat (used by tooltip precompute)
+function bell(center,peak,width,res){
+  const{rise,fall}=getAsymWidths('billableAr',peak);
+  return asymBell(center,peak,rise,fall,res);
 }
 
 function smoothPath(pts){
@@ -508,34 +550,38 @@ function renderStream(c,cb){
   const{zeroY,scale,mA,mB}=calcScale(c,cb,H);
   el.innerHTML=renderGrid(el,H,zeroY,scale,mA,mB);
   const cols=getColPositions(el,c);
-  const RES=96; // 8 samples per month
-  // Compute the actual pixel span of the 12 month columns (excludes FY Total)
+  const RES=STREAM_RES;
   const chartLeft=cols[0].x-cols[0].w/2;
   const chartRight=cols[cols.length-1].x+cols[cols.length-1].w/2;
   const chartSpan=chartRight-chartLeft;
 
-  // Generate bell curves for each series per month
+  // Layer definitions (opacity only — widths computed per-payment by getAsymWidths)
   const inflowLayers=[
-    {key:'currentAr',color:COLORS.currentAr,op:0.50,width:0.020},
-    {key:'billableAr',color:COLORS.billableAr,op:0.45,width:0.030},
-    {key:'committed',color:COLORS.committed,op:0.50,width:0.040},
-    {key:'vat',color:COLORS.vat,op:0.30,width:0.035},
+    {key:'currentAr',color:COLORS.currentAr,op:0.50},
+    {key:'billableAr',color:COLORS.billableAr,op:0.45},
+    {key:'committed',color:COLORS.committed,op:0.50},
+    {key:'vat',color:COLORS.vat,op:0.30},
   ];
   const outflowLayers=[
-    {key:'overhead',color:COLORS.overhead,op:0.40,width:0.035},
-    {key:'cogsWon',color:COLORS.cogsWon,op:0.30,width:0.030},
-    {key:'cogsPipeline',color:COLORS.cogsPipeline,op:0.20,width:0.030},
-    {key:'ap',color:COLORS.ap,op:0.35,width:0.020},
+    {key:'overhead',color:COLORS.overhead,op:0.40},
+    {key:'cogsWon',color:COLORS.cogsWon,op:0.30},
+    {key:'cogsPipeline',color:COLORS.cogsPipeline,op:0.20},
+    {key:'ap',color:COLORS.ap,op:0.35},
+    {key:'capex',color:COLORS.capex,op:0.25},
   ];
 
-  // Build composite curves
+  // Build composite curves with asymmetric bells
   function buildCurves(layers,c){
     return layers.map(layer=>{
       const curve=new Array(RES).fill(0);
       c.forEach((m,mi)=>{
         const center=(mi+0.5)/c.length;
         const val=m[layer.key]||0;
-        if(val>0){const b=bell(center,val,layer.width,RES);for(let i=0;i<RES;i++)curve[i]+=b[i];}
+        if(val>0){
+          const{rise,fall}=getAsymWidths(layer.key,val);
+          const b=asymBell(center,val,rise,fall,RES);
+          for(let i=0;i<RES;i++)curve[i]+=b[i];
+        }
       });
       return{...layer,curve};
     });
@@ -839,6 +885,7 @@ function renderPNL(c,cb){
     {l:'COGS',fn:m=>-(m.cogsWon+m.cogsPipeline),cls:'row-cogs'},
     {l:'VAT Returns',fn:m=>m.vat,cls:'row-vat',editable:true,editType:'vat'},
     {l:'Overhead',fn:m=>-m.overhead,cls:'row-oh',editable:true},
+    {l:'CapEx',fn:m=>-m.capex,cls:'row-capex',editable:true,editType:'capex'},
     {l:'Total Outflow',fn:m=>-m.outflow,cls:'row-out-total'},
     {l:'Net',fn:(m,i)=>m.net,cls:'row-net'},
   ];
@@ -853,9 +900,10 @@ function renderPNL(c,cb){
     c.forEach((m,i)=>{
       if(r.editable){
         const isVat=r.editType==='vat';
-        const amt=isVat?(m.vat||0):(m.overhead||0);
-        const prefix=isVat?'':'- ';
-        const editFn=isVat?'editVat':'editOverhead';
+        const isCapex=r.editType==='capex';
+        const amt=isVat?(m.vat||0):isCapex?(m.capex||0):(m.overhead||0);
+        const prefix=(isVat)?'':'- ';
+        const editFn=isVat?'editVat':isCapex?'editCapex':'editOverhead';
         h+=`<td class="oh-cell" data-month="${m.month}" onclick="${editFn}(this,'${m.month}')" style="cursor:pointer;position:relative" title="Click to edit">${amt>0?prefix+'EUR '+amt.toLocaleString('de-DE',{maximumFractionDigits:0}):'<span class="ghost">—</span>'}</td>`;
       } else {
         const val=r.fn(m,i);h+=`<td class="${r.fc?'fc':''}">${v(val,r.fc)}</td>`;
@@ -993,6 +1041,31 @@ function editVat(cell,month){
   input.addEventListener('keydown',(e)=>{
     if(e.key==='Enter'){input.blur();}
     if(e.key==='Escape'){loadAll();}
+  });
+}
+
+// ─── Editable CapEx ─────────────────────────────────────────
+function editCapex(cell,month){
+  const current=CAPEX[month]||0;
+  const input=document.createElement('input');
+  input.className='oh-edit';
+  input.type='number';
+  input.value=current>0?Math.round(current):'';
+  input.placeholder='EUR';
+  cell.innerHTML='';
+  cell.appendChild(input);
+  input.focus();
+  input.select();
+  const save=()=>{
+    const val=parseFloat(input.value)||0;
+    if(val>0)CAPEX[month]=val; else delete CAPEX[month];
+    saveCapex();
+    render();
+  };
+  input.addEventListener('blur',save);
+  input.addEventListener('keydown',(e)=>{
+    if(e.key==='Enter')input.blur();
+    if(e.key==='Escape')render();
   });
 }
 

@@ -41,6 +41,12 @@ const RECEIVED_STATUS_IDS = new Set([
   "3074d653-dbbf-4e5e-b836-9d92eedd4aea", // Final Payment: Received
 ]);
 
+// 1st Payment Status IDs that mean the deal is active (requested or received)
+const FIRST_PAYMENT_TRIGGERED_IDS = new Set([
+  "b79c8e94-1410-44f6-ae11-a496290518d9", // 1st Payment: Requested
+  "a4e38616-129b-49b9-a18c-7182a49f7603", // 1st Payment: Received
+]);
+
 // Statuses to exclude from sync (not active projects)
 const CLOSED_STATUSES = new Set([
   "shipped",
@@ -109,6 +115,9 @@ export interface ParsedProject {
   totalValue: number;
   status: string;
   milestones: ParsedMilestone[];
+  // 1st payment trigger info
+  firstPaymentTriggered: boolean; // true if 1st Payment Status = Requested or Received
+  firstPaymentDate: Date | null;  // the actual date from "1st Payment Received Date" field
   // Timing fields
   quoteDate: Date | null;
   leadtimeWeeks: number | null;
@@ -375,6 +384,13 @@ export async function parseTask(task: ClickUpTask): Promise<ParsedProject | null
   // Quote date: use task creation date as proxy (project created at kick-off after quote signed)
   const quoteDate = task.date_created ? new Date(Number(task.date_created)) : null;
 
+  // 1st payment trigger: is the deal active? (Requested or Received)
+  const firstPaymentTriggered = firstStatusId
+    ? FIRST_PAYMENT_TRIGGERED_IDS.has(firstStatusId)
+    : false;
+  // The actual 1st payment date (from "1st Payment Received Date" field)
+  const firstPaymentDateVal = firstDate?.value ? new Date(Number(firstDate.value)) : null;
+
   return {
     externalId: jobNo.trim(),
     name: task.name,
@@ -382,6 +398,8 @@ export async function parseTask(task: ClickUpTask): Promise<ParsedProject | null
     totalValue,
     status: statusName,
     milestones,
+    firstPaymentTriggered,
+    firstPaymentDate: firstPaymentDateVal,
     quoteDate,
     leadtimeWeeks,
     productionEta,

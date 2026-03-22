@@ -6,6 +6,7 @@ import {
   decodeQuote,
   extractPaymentTermsFromLineItems,
   addWeeks,
+  computeMilestoneDate,
   QUOTE_SELECT_FIELDS,
   type ComputedMilestone,
 } from "./dynamics-quotes";
@@ -111,113 +112,45 @@ async function fetchDynamicsQuoteMap(
   return map;
 }
 
-// ─── Trigger-Based Date Estimation ────────────────────────────
+// ─── Anchor-Based Date Estimation ─────────────────────────────
 
 /**
- * Estimate when a payment milestone will land based on the payment trigger
- * (from Dynamics) and real project timing (from ClickUp).
+ * Determine the anchor date for projecting payment milestones.
  *
- * Dynamics tells us WHAT the trigger is (start, approval, pre-ship, NET 30).
- * ClickUp tells us WHERE the project is (status, timing fields).
+ * Two modes:
+ * - TRIGGERED: 1st Payment is Requested/Received → use that actual date
+ * - PROVISIONAL: not yet triggered → use ClickUp task creation date
  *
- * Trigger → ClickUp field mapping:
- *   start/deposit    → quoteDate + 1 week
- *   shops            → dueDateShops, or quoteDate + designWeeks
- *   approval         → approvedShopsDate, or dueDateShops + 2wk buffer
- *   mid-manufacture  → midpoint between approval and pre-ship estimates
- *   pre-ship         → productionEta, or approvedShops + productionWeeks
- *   NET 30           → pre-ship estimate + 4 weeks
- *   NET 60           → pre-ship estimate + 9 weeks
+ * Returns { anchorDate, isProvisional }
  */
-function estimateMilestoneDate(
-  trigger: string,
-  project: ParsedProject,
-  dynamicsDesignWeeks?: number | null,
-  dynamicsMfgWeeks?: number | null
-): Date {
-  const now = new Date();
-  const designWeeks = dynamicsDesignWeeks ?? Math.round((project.leadtimeWeeks || 12) * 0.4);
-  const mfgWeeks = dynamicsMfgWeeks ?? Math.round((project.leadtimeWeeks || 12) * 0.6);
-  const productionWeeks = project.leadtimeWeeks
-    ? Math.round(project.leadtimeWeeks * 0.6)
-    : mfgWeeks;
-
-  switch (trigger) {
-    case "start": {
-      // Deposit / 1st payment: ~1 week after quote signing
-      if (project.quoteDate) return addWeeks(project.quoteDate, 1);
-      return new Date(now.getFullYear(), now.getMonth() + 1, 15);
-    }
-
-    case "shops": {
-      // Design complete → shops delivered
-      if (project.dueDateShops) return project.dueDateShops;
-      if (project.quoteDate) return addWeeks(project.quoteDate, designWeeks);
-      return new Date(now.getFullYear(), now.getMonth() + 2, 15);
-    }
-
-    case "approval": {
-      // Client approves shop drawings
-      if (project.approvedShopsDate) return addWeeks(project.approvedShopsDate, 0);
-      if (project.dueDateShops) return addWeeks(project.dueDateShops, 2); // 2wk approval buffer
-      if (project.quoteDate) return addWeeks(project.quoteDate, designWeeks + 2);
-      return new Date(now.getFullYear(), now.getMonth() + 2, 15);
-    }
-
-    case "mid-manufacture": {
-      // Midpoint of production
-      const approvalDate = project.approvedShopsDate
-        || (project.dueDateShops ? addWeeks(project.dueDateShops, 2) : null)
-        || (project.quoteDate ? addWeeks(project.quoteDate, designWeeks + 2) : null);
-      if (approvalDate) return addWeeks(approvalDate, Math.ceil(productionWeeks / 2));
-      return new Date(now.getFullYear(), now.getMonth() + 3, 15);
-    }
-
-    case "pre-ship": {
-      // Production complete, ready to ship
-      // productionEta = when production STARTS, not finishes — add mfg weeks
-      if (project.productionEta) return addWeeks(project.productionEta, mfgWeeks);
-      if (project.approvedShopsDate) return addWeeks(project.approvedShopsDate, mfgWeeks);
-      if (project.dueDateShops) return addWeeks(project.dueDateShops, 2 + mfgWeeks);
-      if (project.quoteDate) return addWeeks(project.quoteDate, designWeeks + mfgWeeks);
-      return new Date(now.getFullYear(), now.getMonth() + 4, 15);
-    }
-
-    case "NET 30": {
-      // 30 days after dispatch (pre-ship + ~4 weeks)
-      const preShipDate = estimateMilestoneDate("pre-ship", project, dynamicsDesignWeeks, dynamicsMfgWeeks);
-      return addWeeks(preShipDate, 4);
-    }
-
-    case "NET 60": {
-      // 60 days after dispatch (pre-ship + ~9 weeks)
-      const preShipDate = estimateMilestoneDate("pre-ship", project, dynamicsDesignWeeks, dynamicsMfgWeeks);
-      return addWeeks(preShipDate, 9);
-    }
-
-    default: {
-      // Unknown trigger — estimate midpoint of total lead time
-      if (project.quoteDate && project.leadtimeWeeks) {
-        return addWeeks(project.quoteDate, Math.ceil(project.leadtimeWeeks / 2));
-      }
-      return new Date(now.getFullYear(), now.getMonth() + 3, 15);
-    }
+function getProjectAnchor(project: ParsedProject): {
+  anchorDate: Date;
+  isProvisional: boolean;
+} {
+  if (project.firstPaymentTriggered && project.firstPaymentDate) {
+    return { anchorDate: project.firstPaymentDate, isProvisional: false };
   }
+  // Provisional: use task creation date (quoteDate is our proxy)
+  return {
+    anchorDate: project.quoteDate || new Date(),
+    isProvisional: true,
+  };
 }
 
 /**
  * Legacy date estimator — used when no Dynamics data is available.
- * Only handles "1st Payment" and "Final Payment" labels.
+ * Uses anchor + simple lead time estimation.
  */
 function estimatePaymentDate(
   label: string,
   project: ParsedProject
 ): Date {
+  const { anchorDate } = getProjectAnchor(project);
+  const leadWeeks = project.leadtimeWeeks || 12;
   if (label === "1st Payment") {
-    return estimateMilestoneDate("start", project);
+    return addWeeks(anchorDate, 1);
   }
-  // For "Final Payment" or anything else, estimate as pre-ship
-  return estimateMilestoneDate("pre-ship", project);
+  return addWeeks(anchorDate, leadWeeks);
 }
 
 // ─── Main Sync ────────────────────────────────────────────────
@@ -374,14 +307,19 @@ export async function syncClickUp(): Promise<SyncResult> {
         where: { projectId: project.id },
       });
 
+      // Determine anchor date for this project
+      const { anchorDate, isProvisional } = getProjectAnchor(parsed);
+      const dw = dynamicsDesignWeeks ?? Math.round((parsed.leadtimeWeeks || 12) * 0.4);
+      const mw = dynamicsMfgWeeks ?? Math.round((parsed.leadtimeWeeks || 12) * 0.6);
+
       // Use Dynamics milestones if available, otherwise ClickUp milestones
       if (dynamicsMilestones) {
-        // Dynamics provides structure (amounts, triggers), ClickUp provides timing
+        // Dynamics provides structure (amounts, triggers)
+        // Anchor date + Dynamics lead times provide the payment schedule
         for (let i = 0; i < dynamicsMilestones.length; i++) {
           const dms = dynamicsMilestones[i];
 
           // Check for prior invoiced/received state
-          // Try exact label match first, then "Final Payment" for the last milestone
           let priorInvoiced = invoicedByLabel.get(dms.label);
           if (!priorInvoiced && i === dynamicsMilestones.length - 1) {
             priorInvoiced = invoicedByLabel.get("Final Payment");
@@ -407,20 +345,18 @@ export async function syncClickUp(): Promise<SyncResult> {
             status = priorInvoiced.status;
             invoiceId = priorInvoiced.invoiceId;
           } else {
-            // Estimate date from ClickUp timing, using Dynamics trigger
-            expectedDate = estimateMilestoneDate(
-              dms.trigger,
-              parsed,
-              dynamicsDesignWeeks,
-              dynamicsMfgWeeks
-            );
-            status = "pending";
+            // Compute date from anchor + Dynamics lead times
+            const computed = computeMilestoneDate(dms.trigger, anchorDate, dw, mw);
+            expectedDate = computed.date;
+            status = isProvisional ? "pending" : "pending";
           }
 
           await prisma.paymentMilestone.create({
             data: {
               projectId: project.id,
-              label: dms.label,
+              label: isProvisional && !clickupSaysReceived && !priorInvoiced
+                ? `${dms.label} (provisional)`
+                : dms.label,
               amount: dms.amount,
               expectedDate,
               status,
