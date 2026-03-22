@@ -373,46 +373,33 @@ export function decodeQuote(
 
   // Determine payment terms — resolution chain:
   // 1. Standard payment terms code (header dropdown)
-  // 2. Manual payment terms text (if code is "Manual Entry")
+  // 2. Manual payment terms text field (if it contains actual % terms)
   // 3. Quote line items (look for a "Payment Terms" product line)
   // 4. Default fallback: 50/50
   let termsToUse = "50% manufacture, 50% pre-ship";
   let termsSource = "default";
 
   if (q) {
+    const manual = (q.nown_manualentrypaymentterms || "").trim();
+    const manualHasTerms = manual && !manual.toLowerCase().includes("see line") && /\d+%/.test(manual);
+    const lineItemTerms = quoteLineItems
+      ? extractPaymentTermsFromLineItems(quoteLineItems)
+      : null;
+
     if (paymentTermsText && paymentTermsText !== "Manual Entry") {
       // 1. Standard payment terms from header dropdown
       termsToUse = paymentTermsText;
       termsSource = "standard";
-    } else if (paymentTermsText === "Manual Entry") {
-      const manual = q.nown_manualentrypaymentterms || "";
-      if (manual && !manual.toLowerCase().includes("see line") && /\d+%/.test(manual)) {
-        // 2. Manual terms field has actual terms
-        termsToUse = manual;
-        termsSource = "manual";
-      } else {
-        // 3. Manual says "see line in quote" or similar — check line items
-        const lineItemTerms = quoteLineItems
-          ? extractPaymentTermsFromLineItems(quoteLineItems)
-          : null;
-        if (lineItemTerms) {
-          termsToUse = lineItemTerms;
-          termsSource = "lineItem";
-        } else {
-          termsToUse = "100% DUE";
-          termsSource = "manual-fallback";
-        }
-      }
-    } else {
-      // No payment terms code at all — try line items before defaulting
-      const lineItemTerms = quoteLineItems
-        ? extractPaymentTermsFromLineItems(quoteLineItems)
-        : null;
-      if (lineItemTerms) {
-        termsToUse = lineItemTerms;
-        termsSource = "lineItem";
-      }
+    } else if (manualHasTerms) {
+      // 2. Manual terms field has actual parseable terms
+      termsToUse = manual;
+      termsSource = "manual";
+    } else if (lineItemTerms) {
+      // 3. Check quote line items for a "Payment Terms" product line
+      termsToUse = lineItemTerms;
+      termsSource = "lineItem";
     }
+    // else: stays as default 50/50
   }
 
   const milestoneDefs = parsePaymentTermsIntoMilestones(termsToUse);

@@ -297,12 +297,15 @@ export async function fetchBankBalance(): Promise<number> {
     }
 
     // Approach 2: Use ReportingBalance with cumulative sum across all periods
+    // Exclude 1190 (Suspend Accounts - Banks) — it's a contra account that
+    // Exact's own financial dashboard excludes from Bank/Cash balance.
+    const EXCLUDE_ACCOUNTS = new Set(["1190"]);
     const glAccounts = await exactGetAll<{ Code: string; Description: string }>(
       "/financial/GLAccounts?$select=Code,Description&$filter=startswith(Code,'10') or startswith(Code,'11')"
     );
     const bankAccounts = glAccounts.filter(a => {
       const code = parseInt(a.Code);
-      return code >= 1000 && code <= 1199;
+      return code >= 1000 && code <= 1199 && !EXCLUDE_ACCOUNTS.has(a.Code);
     });
     if (bankAccounts.length === 0) return 0;
 
