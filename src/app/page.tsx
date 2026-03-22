@@ -199,7 +199,7 @@ function SetupScreen({ status, onRefresh, onSkip }: { status: StatusData | null;
               {eOk ? (
                 <div style={{ fontSize: 8, fontWeight: 700, color: S.green, letterSpacing: 1 }}>CONNECTED</div>
               ) : (
-                <a href="/api/auth/exact" target="_blank" rel="noopener noreferrer"
+                <a href="/api/auth/exact" /* same tab — OAuth redirects back to / */
                   style={{ display: "inline-block", fontSize: 8, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: 1.5, padding: "8px 16px", background: S.ink, color: S.bg, textDecoration: "none", cursor: "pointer", fontFamily: S.font }}>
                   Connect Exact
                 </a>
@@ -218,7 +218,7 @@ function SetupScreen({ status, onRefresh, onSkip }: { status: StatusData | null;
               {dOk ? (
                 <div style={{ fontSize: 8, fontWeight: 700, color: S.green, letterSpacing: 1 }}>CONNECTED</div>
               ) : (
-                <a href="/api/auth/dynamics" target="_blank" rel="noopener noreferrer"
+                <a href="/api/auth/dynamics" /* same tab — OAuth redirects back to / */
                   style={{ display: "inline-block", fontSize: 8, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: 1.5, padding: "8px 16px", background: S.ink, color: S.bg, textDecoration: "none", cursor: "pointer", fontFamily: S.font }}>
                   Connect Dynamics
                 </a>

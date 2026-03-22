@@ -249,12 +249,14 @@ export async function syncClickUp(): Promise<SyncResult> {
     dynamicsMap = await Promise.race([
       fetchDynamicsQuoteMap(),
       new Promise<Map<string, DynamicsQuoteData>>((_, reject) =>
-        setTimeout(() => reject(new Error("Dynamics batch fetch timeout")), 30000)
+        setTimeout(() => reject(new Error("Dynamics batch fetch timeout (60s)")), 60000)
       ),
     ]);
     console.log(`[SYNC] Dynamics enrichment: ${dynamicsMap.size} Won quotes loaded`);
   } catch (e) {
-    console.warn(`[SYNC] Dynamics enrichment unavailable: ${e instanceof Error ? e.message : e}`);
+    const msg = e instanceof Error ? e.message : String(e);
+    console.warn(`[SYNC] Dynamics enrichment unavailable: ${msg}`);
+    result.errors.push(`[Dynamics enrichment skipped: ${msg}]`);
     // Continue with ClickUp-only sync
   }
 
@@ -287,6 +289,7 @@ export async function syncClickUp(): Promise<SyncResult> {
           dynamicsData.quote,
           dynamicsData.lineItems
         );
+        console.log(`[SYNC] ${parsed.externalId}: Dynamics terms source="${decoded.paymentTermsSource}", milestones=${decoded.milestones.length}, hasQuote=${!!dynamicsData.quote}, hasLineItems=${!!dynamicsData.lineItems}`);
         // Only use Dynamics milestones if we got real terms (not default 50/50)
         if (decoded.paymentTermsSource !== "default" && decoded.milestones.length > 0) {
           dynamicsMilestones = decoded.milestones;

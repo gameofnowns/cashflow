@@ -93,6 +93,9 @@ interface MonthData {
 
 // ─── Main Handler ───────────────────────────────────────────
 
+// Vercel serverless function config — increase timeout
+export const maxDuration = 30; // seconds (default is 10)
+
 /**
  * GET /api/dashboard/cash-position
  *

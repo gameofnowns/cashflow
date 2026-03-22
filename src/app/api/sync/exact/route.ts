@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { syncExactOnline, isConnected } from "@/lib/exact";
 
+export const maxDuration = 60; // Exact sync can be slow (pagination)
+
 export async function POST() {
   try {
     const connected = await isConnected();
