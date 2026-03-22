@@ -1,31 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 
-const AUTH_PASSWORD = process.env.APP_PASSWORD || "";
-
-export function middleware(request: NextRequest) {
-  const path = request.nextUrl.pathname;
-
-  // Skip if no password is set
-  if (!AUTH_PASSWORD) return NextResponse.next();
-
-  // ALLOW LIST — these paths bypass auth entirely
-  if (
-    path.endsWith(".html") ||
-    path.startsWith("/api/") ||
-    path.startsWith("/stream") ||
-    path.startsWith("/quote-alignment") ||
-    path === "/login" ||
-    path === "/favicon.ico"
-  ) {
-    return NextResponse.next();
-  }
-
-  // Check for auth cookie
-  const authCookie = request.cookies.get("app_auth")?.value;
-  if (authCookie === AUTH_PASSWORD) {
-    return NextResponse.next();
-  }
-
-  // Redirect to login
-  return NextResponse.redirect(new URL("/login", request.url));
+// Middleware is effectively disabled — auth is handled by the dashboard component itself.
+// All routes pass through. The dashboard checks the auth cookie client-side
+// and shows a login overlay if needed.
+export function middleware() {
+  return NextResponse.next();
 }

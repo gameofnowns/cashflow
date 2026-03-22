@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 
 const CORS_HEADERS = {
@@ -16,7 +16,15 @@ export async function OPTIONS() {
  *
  * Returns connection and sync status for all three integrations.
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
+  // Auth check — return 401 if APP_PASSWORD is set but cookie doesn't match
+  const authPw = process.env.APP_PASSWORD || "";
+  if (authPw) {
+    const cookie = request.cookies.get("app_auth")?.value;
+    if (cookie !== authPw) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: CORS_HEADERS });
+    }
+  }
   try {
     // Check OAuth tokens
     const tokens = await prisma.oAuthToken.findMany();
