@@ -542,15 +542,34 @@ function renderStream(c,cb){
     {key:'ap',color:COLORS.ap,fillOp:0.16,strokeOp:0.50,width:0.020,dash:''},
   ];
 
-  // Build composite curves per layer
+  // Date span for daily event positioning
+  const spanStart=new Date(c[0].month+'-01');
+  const lastMk=c[c.length-1].month.split('-');
+  const spanEnd=new Date(parseInt(lastMk[0]),parseInt(lastMk[1]),0,23,59,59);
+  const spanMs=spanEnd.getTime()-spanStart.getTime();
+  function dateToFrac(iso){return Math.max(0,Math.min(1,(new Date(iso).getTime()-spanStart.getTime())/spanMs));}
+
+  // Build composite curves — uses daily event positions when available
+  const hasEvents=D&&D.events&&D.events.length>0;
   function buildCurves(layers,c){
     return layers.map(layer=>{
       const curve=new Array(RES).fill(0);
-      c.forEach((m,mi)=>{
-        const center=(mi+0.5)/c.length;
-        const val=m[layer.key]||0;
-        if(val>0){const b=bell(center,val,layer.width,RES);for(let i=0;i<RES;i++)curve[i]+=b[i];}
-      });
+      if(hasEvents){
+        const evts=D.events.filter(e=>e.layer===layer.key||(layer.key==='committed'&&e.layer==='pipelinePhase3'));
+        evts.forEach(ev=>{
+          const amt=Math.abs(ev.amount);
+          if(amt<=0)return;
+          const center=dateToFrac(ev.date);
+          const b=bell(center,amt,layer.width,RES);
+          for(let i=0;i<RES;i++)curve[i]+=b[i];
+        });
+      } else {
+        c.forEach((m,mi)=>{
+          const center=(mi+0.5)/c.length;
+          const val=m[layer.key]||0;
+          if(val>0){const b=bell(center,val,layer.width,RES);for(let i=0;i<RES;i++)curve[i]+=b[i];}
+        });
+      }
       return{...layer,curve};
     });
   }
@@ -703,20 +722,25 @@ function precomputeSnappingTooltipFrames(c,cb,inflowCurves,outflowCurves,cols,ze
     const pointDate=new Date(startDate.getTime()+frac*365.25*24*60*60*1000);
     const oneJan=new Date(pointDate.getFullYear(),0,1);
     const week=Math.ceil(((pointDate.getTime()-oneJan.getTime())/86400000+oneJan.getDay()+1)/7);
+    // Date range for this month
+    const mStart=new Date(m.month+'-01');
+    const mEnd=new Date(mStart.getFullYear(),mStart.getMonth()+1,0);
+    const dateRange=`${mStart.toLocaleDateString('en-GB',{day:'numeric',month:'short'})} – ${mEnd.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'2-digit'})}`;
 
     // Collect all project items for this month
     const projects=[];
+    const fd=(iso)=>new Date(iso).toLocaleDateString('en-GB',{day:'numeric',month:'short'});
     (raw.currentArItems||[]).forEach(item=>{
-      projects.push({name:item.projectName,jobNo:item.jobNo,amount:item.amount,layer:'currentAr',color:COLORS.currentAr});
+      projects.push({name:item.projectName,jobNo:item.jobNo,amount:item.amount,layer:'currentAr',color:COLORS.currentAr,date:fd(item.expectedDate)});
     });
     (raw.billableArItems||[]).forEach(item=>{
-      projects.push({name:item.projectName,jobNo:item.jobNo,amount:item.amount,layer:'billableAr',color:COLORS.billableAr});
+      projects.push({name:item.projectName,jobNo:item.jobNo,amount:item.amount,layer:'billableAr',color:COLORS.billableAr,date:fd(item.expectedDate),label:item.label});
     });
     (raw.pipelinePhase3Items||[]).forEach(item=>{
-      projects.push({name:item.projectName,jobNo:item.jobNo,amount:item.amount,layer:'committed',color:COLORS.committed});
+      projects.push({name:item.projectName,jobNo:item.jobNo,amount:item.amount,layer:'committed',color:COLORS.committed,date:fd(item.expectedDate)});
     });
     (raw.apItems||[]).forEach(item=>{
-      projects.push({name:item.projectName,jobNo:null,amount:-item.amount,layer:'ap',color:COLORS.ap});
+      projects.push({name:item.projectName,jobNo:null,amount:-item.amount,layer:'ap',color:COLORS.ap,date:fd(item.expectedDate)});
     });
     // Add aggregate outflow layers as summary items
     if(m.cogsWon>0)projects.push({name:'COGS (Won projects)',jobNo:null,amount:-m.cogsWon,layer:'cogsWon',color:COLORS.cogsWon});
@@ -737,7 +761,7 @@ function precomputeSnappingTooltipFrames(c,cb,inflowCurves,outflowCurves,cols,ze
     const pt=cashPts[mi];
     frames.push({
       x:cols[mi].x,         // snap X = column center (cash dot position)
-      monthName,week,
+      monthName,week,dateRange,
       totalIn:m.inflow,totalOut:m.outflow,net:m.net,
       byLayer,
       cashPosition:pt.cash,cashX:pt.x,cashY:pt.y
@@ -782,7 +806,7 @@ const LAYER_NAMES={currentAr:'Current AR',billableAr:'Billable AR',committed:'Co
     scanEl.style.opacity='1';
 
     // Header
-    ttTime.textContent=`${f.monthName} · WK ${f.week}`;
+    ttTime.textContent=f.dateRange?`${f.dateRange} · WK ${f.week}`:`${f.monthName} · WK ${f.week}`;
     const isPos=f.net>=0;
     ttNet.textContent=`${isPos?'+':'-'} ${K(Math.abs(f.net))} net`;
     ttNet.style.color=isPos?'#4a9e5c':'var(--terracotta)';
@@ -799,7 +823,9 @@ const LAYER_NAMES={currentAr:'Current AR',billableAr:'Billable AR',committed:'Co
         const neg=item.amount<0;
         const amtColor=neg?'var(--terracotta)':'var(--ink)';
         const jobTag=item.jobNo?`<span class="stt-job">${item.jobNo}</span>`:'';
-        bh+=`<div class="stt-item"><span class="stt-name">${item.name} ${jobTag}</span><span class="stt-amt" style="color:${amtColor}">${neg?'- ':''}${K(Math.abs(item.amount))}</span></div>`;
+        const dateTag=item.date?`<span style="color:var(--dim);font-size:7px;margin-left:4px">${item.date}</span>`:'';
+        const labelTag=item.label?`<span style="color:var(--dim);font-size:7px;margin-left:2px">${item.label}</span>`:'';
+        bh+=`<div class="stt-item"><span class="stt-name">${item.name} ${jobTag}${labelTag}${dateTag}</span><span class="stt-amt" style="color:${amtColor}">${neg?'- ':''}${K(Math.abs(item.amount))}</span></div>`;
       });
       if(layer.items.length>4)bh+=`<div class="stt-item" style="color:var(--dim);font-size:8px;padding-left:0">+${layer.items.length-4} more</div>`;
       bh+=`</div>`;
