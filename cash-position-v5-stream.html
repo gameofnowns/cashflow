@@ -1062,6 +1062,34 @@ function editCapex(cell,month){
   });
 }
 
+// ─── OAuth Popup ────────────────────────────────────────────
+let lastStatus=null;
+function openOAuthPopup(provider){
+  const w=500,h=600;
+  const left=Math.round((screen.width-w)/2);
+  const top=Math.round((screen.height-h)/2);
+  const popup=window.open(
+    `${API}/api/auth/${provider}?popup=1`,
+    `oauth_${provider}`,
+    `width=${w},height=${h},left=${left},top=${top},toolbar=no,menubar=no`
+  );
+  if(!popup){alert('Popup blocked — please allow popups for this site and try again.');}
+  else popup.focus();
+}
+window.addEventListener('message',function(event){
+  if(event.origin!==window.location.origin)return;
+  if(event.data?.type==='oauth_complete'){
+    const provider=event.data.provider;
+    setTimeout(async()=>{
+      await loadAll();
+      try{await fetch(`${API}/api/sync/${provider}`,{method:'POST'});setTimeout(loadAll,1000);}catch{}
+    },500);
+  }
+  if(event.data?.type==='oauth_error'){
+    console.error('OAuth failed for',event.data.provider,event.data.error);
+  }
+});
+
 // ─── Data loading ───────────────────────────────────────────
 async function loadAll(){
   document.getElementById('ts').textContent=new Date().toLocaleString('nl-NL').toLowerCase();
@@ -1072,11 +1100,15 @@ async function loadAll(){
     const[dr,sr]=await Promise.all([fetch(`${API}/api/dashboard/cash-position${params}`,{credentials:'include'}),fetch(`${API}/api/dashboard/status`,{credentials:'include'})]);
     const data=await dr.json();if(data.error)throw new Error(data.error);
     D=data;if(!bv&&D.bankBalance>0){const inp=document.getElementById('bank-input');if(inp)inp.value=Math.round(D.bankBalance);}
-    try{const s=await sr.json();const el=document.getElementById('syncs');const dOk=s.dynamics?.connected&&s.dynamics?.tokenValid;const cOk=s.clickup?.connected&&(s.clickup?.projectsSynced||0)>0;const eOk=s.exact?.connected&&s.exact?.tokenValid;el.innerHTML=`<span class="r1-sync" onclick="runSync('dynamics')"><span class="r1-dot ${dOk?'ok':'off'}"></span>DYN</span><span class="r1-sync" onclick="runSync('clickup')"><span class="r1-dot ${cOk?'ok':'off'}"></span>CU</span><span class="r1-sync" onclick="runSync('exact')"><span class="r1-dot ${eOk?'ok':'off'}"></span>EX</span>`;}catch{}
+    try{const s=await sr.json();lastStatus=s;const el=document.getElementById('syncs');const dOk=s.dynamics?.connected&&s.dynamics?.tokenValid;const cOk=s.clickup?.connected&&(s.clickup?.projectsSynced||0)>0;const eOk=s.exact?.connected&&s.exact?.tokenValid;el.innerHTML=`<span class="r1-sync" onclick="runSync('dynamics')"><span class="r1-dot ${dOk?'ok':'off'}"></span>DYN</span><span class="r1-sync" onclick="runSync('clickup')"><span class="r1-dot ${cOk?'ok':'off'}"></span>CU</span><span class="r1-sync" onclick="runSync('exact')"><span class="r1-dot ${eOk?'ok':'off'}"></span>EX</span>`;}catch{}
     render();
   }catch(e){document.getElementById('metrics').innerHTML=`<div class="r1-m"><span class="r1-ml">ERROR</span><span class="r1-mv r1-neg">${e.message}</span></div>`;}
 }
-async function runSync(p){try{await fetch(`${API}/api/sync/${p}`,{method:'POST'});setTimeout(loadAll,500);}catch{}}
+async function runSync(p){
+  if(p==='exact'&&lastStatus&&(!lastStatus.exact?.connected||!lastStatus.exact?.tokenValid)){openOAuthPopup('exact');return;}
+  if(p==='dynamics'&&lastStatus&&(!lastStatus.dynamics?.connected||!lastStatus.dynamics?.tokenValid)){openOAuthPopup('dynamics');return;}
+  try{await fetch(`${API}/api/sync/${p}`,{method:'POST'});setTimeout(loadAll,500);}catch{}
+}
 
 // ─── Login ──────────────────────────────────────────────────
 async function checkAuth(){
@@ -1130,7 +1162,7 @@ async function checkSetup(){
           <div class="setup-card-name">Exact Online</div>
           <div class="setup-card-detail ${eOk?'ok':''}">${eOk?'Connected — Bank EUR '+K(s.exact?.bankBalance||0)+', AR '+s.exact?.arItems?.total+' items':'Not connected — AR, AP, bank balance'}</div>
         </div>
-        ${eOk?'<span class="setup-card-btn connected">Connected</span>':`<a href="${API}/api/auth/exact" class="setup-card-btn">Connect Exact</a>`}
+        ${eOk?'<span class="setup-card-btn connected">Connected</span>':`<button class="setup-card-btn" onclick="openOAuthPopup('exact')">Connect Exact</button>`}
       </div>
       <div class="setup-card">
         <span class="setup-card-dot ${dOk?'ok':'off'}"></span>
@@ -1138,7 +1170,7 @@ async function checkSetup(){
           <div class="setup-card-name">Dynamics 365</div>
           <div class="setup-card-detail ${dOk?'ok':''}">${dOk?'Connected — '+s.dynamics.projectsSynced+' pipeline opps':'Not connected — quotes, pipeline, payment terms'}</div>
         </div>
-        ${dOk?'<span class="setup-card-btn connected">Connected</span>':`<a href="${API}/api/auth/dynamics" class="setup-card-btn">Connect Dynamics</a>`}
+        ${dOk?'<span class="setup-card-btn connected">Connected</span>':`<button class="setup-card-btn" onclick="openOAuthPopup('dynamics')">Connect Dynamics</button>`}
       </div>
       <div class="setup-card">
         <span class="setup-card-dot ${cOk?'ok':'off'}"></span>

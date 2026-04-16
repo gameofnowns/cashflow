@@ -21,13 +21,14 @@ const API_BASE = `${DYNAMICS_URL}/api/data/v9.2`;
 /**
  * Generate the Dynamics OAuth authorization URL.
  */
-export function getAuthorizationUrl(): string {
+export function getAuthorizationUrl(state?: string): string {
   const params = new URLSearchParams({
     client_id: CLIENT_ID,
     redirect_uri: REDIRECT_URI,
     response_type: "code",
     scope: `${DYNAMICS_URL}/user_impersonation offline_access`,
   });
+  if (state) params.set("state", state);
   return `${AUTH_URL}?${params.toString()}`;
 }
 

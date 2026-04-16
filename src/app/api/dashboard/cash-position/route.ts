@@ -192,6 +192,7 @@ export async function GET(request: Request) {
           amount: ms.amount,
           expectedDate: ms.expectedDate.toISOString(),
           status: ms.status,
+          trigger: ms.trigger ?? undefined,
         });
         // COGS lands 1 month after the AR milestone (payment terms / office lag)
         const cogsMk = shiftMonthKey(mk, 1);

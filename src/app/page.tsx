@@ -17,73 +17,26 @@ function NownLogo({ width = 200 }: { width?: number }) {
   );
 }
 
-interface StatusData {
-  dynamics: { connected: boolean; tokenValid: boolean; projectsSynced: number };
-  clickup: { connected: boolean; projectsSynced: number; milestones: number };
-  exact: { connected: boolean; tokenValid: boolean; arItems?: { total: number }; bankBalance?: number };
-}
-
 export default function Home() {
-  const [phase, setPhase] = useState<"checking" | "login" | "setup" | "dashboard">("checking");
-  const [status, setStatus] = useState<StatusData | null>(null);
+  const [phase, setPhase] = useState<"checking" | "login" | "dashboard">("checking");
 
   const checkAuth = useCallback(async () => {
     try {
-      // Step 1: Check if authenticated
       const authRes = await fetch("/api/auth/check", { credentials: "include" });
       if (authRes.status === 401) {
         setPhase("login");
-        return;
-      }
-
-      // Step 2: Check API connection status
-      const statusRes = await fetch("/api/dashboard/status", { credentials: "include" });
-      if (statusRes.ok) {
-        const data = await statusRes.json();
-        setStatus(data);
-        const dOk = data.dynamics?.connected && data.dynamics?.tokenValid;
-        const cOk = data.clickup?.connected && (data.clickup?.projectsSynced || 0) > 0;
-        const eOk = data.exact?.connected && data.exact?.tokenValid;
-        if (dOk && cOk && eOk) {
-          setPhase("dashboard");
-        } else {
-          setPhase("setup");
-        }
       } else {
-        setPhase("dashboard"); // Status failed but auth passed — show dashboard
+        setPhase("dashboard");
       }
     } catch {
-      setPhase("dashboard"); // Network error — try anyway
+      setPhase("dashboard");
     }
   }, []);
 
   useEffect(() => { checkAuth(); }, [checkAuth]);
 
-  // Listen for OAuth callback (Exact/Dynamics redirect back to this page)
-  useEffect(() => {
-    if (phase === "setup") {
-      const interval = setInterval(async () => {
-        try {
-          const res = await fetch("/api/dashboard/status", { credentials: "include" });
-          if (res.ok) {
-            const data = await res.json();
-            setStatus(data);
-            const dOk = data.dynamics?.connected && data.dynamics?.tokenValid;
-            const cOk = data.clickup?.connected && (data.clickup?.projectsSynced || 0) > 0;
-            const eOk = data.exact?.connected && data.exact?.tokenValid;
-            if (dOk && cOk && eOk) {
-              setPhase("dashboard");
-            }
-          }
-        } catch { /* silent */ }
-      }, 3000);
-      return () => clearInterval(interval);
-    }
-  }, [phase]);
-
   if (phase === "checking") return <LoadingScreen />;
   if (phase === "login") return <LoginScreen onSuccess={checkAuth} />;
-  if (phase === "setup") return <SetupScreen status={status} onRefresh={checkAuth} onSkip={() => setPhase("dashboard")} />;
   return <DashboardFrame />;
 }
 
@@ -143,117 +96,6 @@ function LoginScreen({ onSuccess }: { onSuccess: () => void }) {
         </button>
         {error && <div style={{ fontSize: 9, color: S.terracotta, marginTop: 10, fontWeight: 700 }}>{error}</div>}
         <div style={{ fontSize: 7, color: S.ghost, marginTop: 32, letterSpacing: 1 }}>NOWN B.V. — CASH POSITION DASHBOARD</div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Setup Screen ───────────────────────────────────────────
-
-function SetupScreen({ status, onRefresh, onSkip }: { status: StatusData | null; onRefresh: () => void; onSkip: () => void }) {
-  const [syncing, setSyncing] = useState<string | null>(null);
-
-  const dOk = status?.dynamics?.connected && status?.dynamics?.tokenValid;
-  const cOk = status?.clickup?.connected && (status?.clickup?.projectsSynced || 0) > 0;
-  const eOk = status?.exact?.connected && status?.exact?.tokenValid;
-  const connectedCount = [dOk, cOk, eOk].filter(Boolean).length;
-
-  const syncClickUp = async () => {
-    setSyncing("clickup");
-    try { await fetch("/api/sync/clickup", { method: "POST", credentials: "include" }); } catch { /* */ }
-    setTimeout(() => { setSyncing(null); onRefresh(); }, 2000);
-  };
-
-  return (
-    <div style={{ background: S.bg, minHeight: "100vh", fontFamily: S.font, display: "flex", flexDirection: "column" }}>
-      {/* Header */}
-      <div style={{ padding: "10px 18px", borderBottom: S.grid, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <NownLogo width={140} />
-        <button onClick={onSkip} style={{ fontSize: 8, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: 1.5, padding: "6px 14px", border: S.grid, background: "transparent", color: S.dim, cursor: "pointer", fontFamily: S.font }}
-          onMouseEnter={(e) => { (e.target as HTMLElement).style.color = S.orange; (e.target as HTMLElement).style.borderColor = S.orange; }}
-          onMouseLeave={(e) => { (e.target as HTMLElement).style.color = S.dim; (e.target as HTMLElement).style.borderColor = S.ink; }}>
-          Skip to Dashboard →
-        </button>
-      </div>
-
-      {/* Content */}
-      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <div style={{ width: 520, textAlign: "center" }}>
-          <div style={{ fontSize: 28, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: 6, marginBottom: 8 }}>CONNECT</div>
-          <div style={{ fontSize: 9, fontWeight: 300, color: S.dim, letterSpacing: 0.3, marginBottom: 32 }}>
-            {connectedCount}/3 data sources connected — connect all three to see your full cash position
-          </div>
-
-          {/* Progress bar */}
-          <div style={{ height: 3, background: S.ghost, marginBottom: 32, position: "relative" }}>
-            <div style={{ height: "100%", background: S.green, width: `${(connectedCount / 3) * 100}%`, transition: "width 300ms ease" }} />
-          </div>
-
-          {/* Three cards */}
-          <div style={{ display: "flex", gap: 0 }}>
-            {/* Exact Online */}
-            <div style={{ flex: 1, padding: "20px 18px", border: S.grid, borderRight: "none", textAlign: "left" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                <div style={{ width: 8, height: 8, background: eOk ? S.green : S.terracotta }} />
-                <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: 2 }}>Exact Online</div>
-              </div>
-              <div style={{ fontSize: 8, color: S.dim, marginBottom: 12, lineHeight: 1.5 }}>
-                {eOk ? `Connected — Bank EUR ${Math.round((status?.exact?.bankBalance || 0) / 1000)}K` : "AR, AP, bank balance"}
-              </div>
-              {eOk ? (
-                <div style={{ fontSize: 8, fontWeight: 700, color: S.green, letterSpacing: 1 }}>CONNECTED</div>
-              ) : (
-                <a href="/api/auth/exact" /* same tab — OAuth redirects back to / */
-                  style={{ display: "inline-block", fontSize: 8, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: 1.5, padding: "8px 16px", background: S.ink, color: S.bg, textDecoration: "none", cursor: "pointer", fontFamily: S.font }}>
-                  Connect Exact
-                </a>
-              )}
-            </div>
-
-            {/* Dynamics 365 */}
-            <div style={{ flex: 1, padding: "20px 18px", border: S.grid, borderRight: "none", textAlign: "left" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                <div style={{ width: 8, height: 8, background: dOk ? S.green : S.terracotta }} />
-                <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: 2 }}>Dynamics 365</div>
-              </div>
-              <div style={{ fontSize: 8, color: S.dim, marginBottom: 12, lineHeight: 1.5 }}>
-                {dOk ? `Connected — ${status?.dynamics?.projectsSynced || 0} pipeline opps` : "Quotes, pipeline, payment terms"}
-              </div>
-              {dOk ? (
-                <div style={{ fontSize: 8, fontWeight: 700, color: S.green, letterSpacing: 1 }}>CONNECTED</div>
-              ) : (
-                <a href="/api/auth/dynamics" /* same tab — OAuth redirects back to / */
-                  style={{ display: "inline-block", fontSize: 8, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: 1.5, padding: "8px 16px", background: S.ink, color: S.bg, textDecoration: "none", cursor: "pointer", fontFamily: S.font }}>
-                  Connect Dynamics
-                </a>
-              )}
-            </div>
-
-            {/* ClickUp */}
-            <div style={{ flex: 1, padding: "20px 18px", border: S.grid, textAlign: "left" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                <div style={{ width: 8, height: 8, background: cOk ? S.green : S.orange }} />
-                <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: 2 }}>ClickUp</div>
-              </div>
-              <div style={{ fontSize: 8, color: S.dim, marginBottom: 12, lineHeight: 1.5 }}>
-                {cOk ? `Connected — ${status?.clickup?.projectsSynced} projects` : "Won projects, milestones, timing"}
-              </div>
-              {cOk ? (
-                <div style={{ fontSize: 8, fontWeight: 700, color: S.green, letterSpacing: 1 }}>CONNECTED</div>
-              ) : (
-                <button onClick={syncClickUp} disabled={syncing === "clickup"}
-                  style={{ fontSize: 8, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: 1.5, padding: "8px 16px", background: S.ink, color: S.bg, border: "none", cursor: syncing ? "wait" : "pointer", fontFamily: S.font }}>
-                  {syncing === "clickup" ? "Syncing..." : "Sync ClickUp"}
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Help text */}
-          <div style={{ fontSize: 7, color: S.ghost, marginTop: 24, letterSpacing: 0.5, lineHeight: 1.6 }}>
-            Connect buttons open in a new tab. After authorizing, return here — status updates automatically.
-          </div>
-        </div>
       </div>
     </div>
   );

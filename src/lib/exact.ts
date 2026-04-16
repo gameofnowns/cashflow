@@ -27,13 +27,14 @@ function getRedirectUri(): string {
  * Generate the Exact Online OAuth authorization URL.
  * Redirect the user here to start the OAuth flow.
  */
-export function getAuthorizationUrl(): string {
+export function getAuthorizationUrl(state?: string): string {
   const params = new URLSearchParams({
     client_id: getClientId(),
     redirect_uri: getRedirectUri(),
     response_type: "code",
     force_login: "0",
   });
+  if (state) params.set("state", state);
   return `${AUTH_URL}?${params.toString()}`;
 }
 
@@ -424,11 +425,20 @@ async function updateMilestoneFromAr(
 
   if (milestones.length === 0) return;
 
-  // Try to identify which milestone from description ("1 of 2" = 1st, "2 of 2" = final)
+  // Try to identify which milestone from description ("1 of 2", "2 of 4", etc.)
   const desc = arItem.Description || "";
   let targetLabel: string | null = null;
-  if (/1\s*of\s*2/i.test(desc)) targetLabel = "1st Payment";
-  else if (/2\s*of\s*2/i.test(desc)) targetLabel = "Final Payment";
+  const nOfM = desc.match(/(\d+)\s*of\s*(\d+)/i);
+  if (nOfM) {
+    const n = parseInt(nOfM[1]);
+    // Check if milestones use Invoice labels (new system) or legacy labels
+    const hasInvoiceLabels = milestones.some((ms) => ms.label?.startsWith("Invoice "));
+    if (hasInvoiceLabels) {
+      targetLabel = `Invoice ${n}`;
+    } else if (parseInt(nOfM[2]) === 2) {
+      targetLabel = n === 1 ? "1st Payment" : "Final Payment";
+    }
+  }
 
   // Find best matching milestone
   let bestMatch = milestones[0];

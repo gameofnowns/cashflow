@@ -1,9 +1,10 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getAuthorizationUrl } from "@/lib/dynamics";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const url = getAuthorizationUrl();
+    const popup = request.nextUrl.searchParams.get("popup") === "1";
+    const url = getAuthorizationUrl(popup ? "popup" : undefined);
     return NextResponse.redirect(url);
   } catch (e) {
     return NextResponse.json(

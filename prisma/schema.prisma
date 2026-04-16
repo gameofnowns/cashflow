@@ -48,6 +48,7 @@ model PaymentMilestone {
   amount       Float
   expectedDate DateTime @map("expected_date")
   status       String   @default("pending") // 'pending' | 'invoiced' | 'received'
+  trigger      String?  // 'start' | 'approval' | 'pre-ship' | 'NET 30' etc.
   invoiceId    String?  @map("invoice_id")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")

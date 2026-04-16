@@ -377,14 +377,80 @@ export async function syncClickUp(): Promise<SyncResult> {
         where: { projectId: project.id },
       });
 
-      // Use Dynamics milestones if available, otherwise ClickUp milestones
-      if (dynamicsMilestones) {
+      // 3-tier priority: ClickUp Invoice 1-6 → Dynamics → Legacy ClickUp
+      const hasInvoiceMilestones = parsed.invoiceMilestones.length > 0;
+
+      if (hasInvoiceMilestones) {
+        // ─── TIER 1: ClickUp Invoice 1-6 fields ─────────────────
+        console.log(`[SYNC] ${parsed.externalId}: Using Invoice 1-${parsed.invoiceMilestones.length} fields (${parsed.invoiceMilestones.length} milestones)`);
+
+        for (let i = 0; i < parsed.invoiceMilestones.length; i++) {
+          const ims = parsed.invoiceMilestones[i];
+
+          // Check for prior invoiced/received state (try new label, then legacy fallbacks)
+          let priorInvoiced = invoicedByLabel.get(ims.label);
+          if (!priorInvoiced && i === 0) {
+            priorInvoiced = invoicedByLabel.get("1st Payment");
+          }
+          if (!priorInvoiced && i === parsed.invoiceMilestones.length - 1) {
+            priorInvoiced = invoicedByLabel.get("Final Payment");
+          }
+
+          let expectedDate: Date;
+          let status: string;
+          let invoiceId: string | null = null;
+
+          if (ims.status === "received" || ims.status === "invoiced") {
+            // ClickUp Invoice field has status tag — trust it
+            expectedDate = estimateMilestoneDate(
+              ims.trigger || "start",
+              parsed,
+              dynamicsDesignWeeks,
+              dynamicsMfgWeeks,
+              dynamicsShippingWeeks
+            );
+            status = ims.status;
+            // Still preserve AR invoiceId if we have one
+            if (priorInvoiced?.invoiceId) {
+              invoiceId = priorInvoiced.invoiceId;
+              expectedDate = priorInvoiced.expectedDate; // Use real Exact due date
+            }
+          } else if (priorInvoiced) {
+            // Restore AR-matched state from previous sync
+            expectedDate = priorInvoiced.expectedDate;
+            status = priorInvoiced.status;
+            invoiceId = priorInvoiced.invoiceId;
+          } else {
+            // Estimate date from trigger
+            expectedDate = estimateMilestoneDate(
+              ims.trigger || "start",
+              parsed,
+              dynamicsDesignWeeks,
+              dynamicsMfgWeeks,
+              dynamicsShippingWeeks
+            );
+            status = "pending";
+          }
+
+          await prisma.paymentMilestone.create({
+            data: {
+              projectId: project.id,
+              label: ims.label,
+              amount: ims.amount,
+              expectedDate,
+              status,
+              invoiceId,
+              trigger: ims.trigger || null,
+            },
+          });
+        }
+      } else if (dynamicsMilestones) {
+        // ─── TIER 2: Dynamics payment terms ─────────────────────
         // Dynamics provides structure (amounts, triggers), ClickUp provides timing
         for (let i = 0; i < dynamicsMilestones.length; i++) {
           const dms = dynamicsMilestones[i];
 
           // Check for prior invoiced/received state
-          // Try exact label match first, then "Final Payment" for the last milestone
           let priorInvoiced = invoicedByLabel.get(dms.label);
           if (!priorInvoiced && i === dynamicsMilestones.length - 1) {
             priorInvoiced = invoicedByLabel.get("Final Payment");
@@ -401,16 +467,13 @@ export async function syncClickUp(): Promise<SyncResult> {
           let invoiceId: string | null = null;
 
           if (clickupSaysReceived && clickupMs?.expectedDate) {
-            // ClickUp confirms received — use ClickUp date
             expectedDate = clickupMs.expectedDate;
             status = "received";
           } else if (priorInvoiced) {
-            // Restore AR-matched invoiced/received state
             expectedDate = priorInvoiced.expectedDate;
             status = priorInvoiced.status;
             invoiceId = priorInvoiced.invoiceId;
           } else {
-            // Estimate date from ClickUp timing, using Dynamics trigger + shipping
             expectedDate = estimateMilestoneDate(
               dms.trigger,
               parsed,
@@ -429,11 +492,12 @@ export async function syncClickUp(): Promise<SyncResult> {
               expectedDate,
               status,
               invoiceId,
+              trigger: dms.trigger,
             },
           });
         }
       } else {
-        // No Dynamics data — use ClickUp milestones (existing behavior)
+        // ─── TIER 3: Legacy ClickUp 1st/Final Payment ───────────
         for (const ms of parsed.milestones) {
           const priorInvoiced = invoicedByLabel.get(ms.label);
 

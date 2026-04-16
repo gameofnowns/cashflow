@@ -26,6 +26,13 @@ const FIELD_IDS = {
   dueDate: "Due Date",
   contractDeadline: "Contract Deadline",
   actualDispatch: "Actual Dispatch",
+  // Invoice columns (label/tag fields) — up to 6 per project
+  invoice1: "Invoice 1",
+  invoice2: "Invoice 2",
+  invoice3: "Invoice 3",
+  invoice4: "Invoice 4",
+  invoice5: "Invoice 5",
+  invoice6: "Invoice 6",
 } as const;
 
 // Project Type dropdown option IDs → our type codes
@@ -52,6 +59,30 @@ const CLOSED_STATUSES = new Set([
   "z - hold",
   "hold",
 ]);
+
+/** Map ClickUp Invoice Trigger tag names → estimateMilestoneDate trigger strings.
+ *  Keys are trimmed/lowercased for matching. */
+const INVOICE_TRIGGER_MAP: Record<string, string> = {
+  "signed quote": "start",
+  "shop drawing approval": "approval",
+  "pre-ship": "pre-ship",
+  "pre-ship final": "pre-ship",
+  "pre-production": "mid-manufacture",
+  "mid-manufacture": "mid-manufacture",
+  "shops": "shops",
+  "net 30": "NET 30",
+  "net 60": "NET 60",
+  "n/a": "start", // Fallback for placeholder triggers
+};
+
+/** Map ClickUp Invoice Status tag names → milestone status values.
+ *  Keys are trimmed/lowercased for matching. */
+const INVOICE_STATUS_MAP: Record<string, "pending" | "invoiced" | "received"> = {
+  "invoice sent": "invoiced",
+  "payment received": "received",
+  "overdue": "invoiced",
+  "paid in full": "received",
+};
 
 /**
  * Parse European-formatted numbers: €98.521,78 → 98521.78
@@ -98,7 +129,8 @@ interface ClickUpCustomField {
   type: string;
   value: unknown;
   type_config?: {
-    options?: Array<{ id: string; name: string; orderindex: number }>;
+    // Dropdown fields use `name`, label fields use `label`
+    options?: Array<{ id: string; name?: string; label?: string; orderindex: number }>;
   };
 }
 
@@ -109,6 +141,7 @@ export interface ParsedProject {
   totalValue: number;
   status: string;
   milestones: ParsedMilestone[];
+  invoiceMilestones: ParsedMilestone[];
   // Timing fields
   quoteDate: Date | null;
   leadtimeWeeks: number | null;
@@ -129,6 +162,7 @@ export interface ParsedMilestone {
   amount: number;
   expectedDate: Date | null;
   status: "pending" | "invoiced" | "received";
+  trigger?: string;
 }
 
 function getToken(): string {
@@ -197,6 +231,107 @@ function getNumberValue(field: ClickUpCustomField | undefined): number | null {
 function getTextValue(field: ClickUpCustomField | undefined): string | null {
   if (!field?.value) return null;
   return String(field.value);
+}
+
+/**
+ * Extract resolved label/tag names from a ClickUp label field.
+ * Label fields store `value` as an array of option ID strings.
+ * Returns the option names in positional order (by orderindex).
+ */
+function getLabelValues(field: ClickUpCustomField | undefined): string[] {
+  if (!field?.value || !Array.isArray(field.value)) return [];
+  const options = field.type_config?.options;
+  if (!options) return [];
+
+  const optionById = new Map(options.map((o) => [o.id, o]));
+
+  const resolved = (field.value as string[])
+    .map((id) => optionById.get(id))
+    .filter((o): o is NonNullable<typeof o> => o !== undefined)
+    .sort((a, b) => a.orderindex - b.orderindex);
+
+  // Label fields use `label`, dropdown fields use `name`
+  return resolved.map((o) => (o.label ?? o.name ?? "").trim()).filter((s) => s.length > 0);
+}
+
+interface ParsedInvoiceLabel {
+  status: "pending" | "invoiced" | "received";
+  trigger: string;
+  triggerKey: string;
+  percentage: number;
+  invoiceValue: number;
+}
+
+/**
+ * Classify a tag by its content pattern rather than relying on position alone.
+ * ClickUp tag names may have trailing spaces, so we trim before matching.
+ */
+function classifyInvoiceTag(raw: string): "status" | "trigger" | "percent" | "value" {
+  const tag = raw.trim().toLowerCase();
+  if (INVOICE_STATUS_MAP[tag] !== undefined) return "status";
+  if (/^\d+\s*%$/.test(tag)) return "percent";
+  // European number: digits with dots/commas (e.g., "5.580,29", "101.246,96")
+  if (/^[\d.,]+$/.test(tag) && /\d/.test(tag)) return "value";
+  return "trigger";
+}
+
+/**
+ * Parse a single Invoice label field into its components.
+ * Uses content-based classification to handle variable tag combinations:
+ *   3 tags: [Trigger, %, Value] or [Status, %, Value]
+ *   4 tags: [Status, Trigger, %, Value]
+ * Tags are identified by pattern, not position, to handle real-world data.
+ */
+function parseInvoiceLabelField(
+  field: ClickUpCustomField | undefined
+): ParsedInvoiceLabel | null {
+  const tags = getLabelValues(field);
+  if (tags.length < 2) return null;
+
+  let statusTag: string | null = null;
+  let triggerTag: string | null = null;
+  let percentage = 0;
+  let invoiceValue = 0;
+
+  for (const raw of tags) {
+    const trimmed = raw.trim();
+    const kind = classifyInvoiceTag(trimmed);
+    switch (kind) {
+      case "status":
+        statusTag = trimmed;
+        break;
+      case "trigger":
+        triggerTag = trimmed;
+        break;
+      case "percent": {
+        const m = trimmed.match(/(\d+)\s*%/);
+        if (m) percentage = parseInt(m[1]) / 100;
+        break;
+      }
+      case "value":
+        invoiceValue = parseEuropeanNumber(trimmed);
+        break;
+    }
+  }
+
+  // Must have at least a percentage or value to be a valid invoice
+  if (percentage === 0 && invoiceValue === 0) return null;
+
+  const status: "pending" | "invoiced" | "received" = statusTag
+    ? (INVOICE_STATUS_MAP[statusTag.toLowerCase()] ?? "pending")
+    : "pending";
+
+  const triggerKey = triggerTag
+    ? (INVOICE_TRIGGER_MAP[triggerTag.toLowerCase()] ?? triggerTag.toLowerCase())
+    : "start";
+
+  return {
+    status,
+    trigger: triggerTag || "start",
+    triggerKey,
+    percentage,
+    invoiceValue,
+  };
 }
 
 /**
@@ -300,6 +435,20 @@ export async function parseTask(task: ClickUpTask): Promise<ParsedProject | null
     }
   }
 
+  // Fallback: derive total value from Invoice 1-6 label fields
+  if (!totalValue || isNaN(totalValue)) {
+    const invoiceFieldNames = [
+      FIELD_IDS.invoice1, FIELD_IDS.invoice2, FIELD_IDS.invoice3,
+      FIELD_IDS.invoice4, FIELD_IDS.invoice5, FIELD_IDS.invoice6,
+    ];
+    let invoiceSum = 0;
+    for (const fieldName of invoiceFieldNames) {
+      const parsed = parseInvoiceLabelField(getCustomField(task, fieldName));
+      if (parsed && parsed.invoiceValue > 0) invoiceSum += parsed.invoiceValue;
+    }
+    if (invoiceSum > 0) totalValue = invoiceSum;
+  }
+
   if (!totalValue || isNaN(totalValue)) return null;
 
   // Parse payment milestones from 1st and Final payment fields
@@ -357,6 +506,33 @@ export async function parseTask(task: ClickUpTask): Promise<ParsedProject | null
     });
   }
 
+  // Parse Invoice 1-6 label fields (new sequential invoicing structure)
+  const invoiceMilestones: ParsedMilestone[] = [];
+  const invoiceFieldNames = [
+    FIELD_IDS.invoice1, FIELD_IDS.invoice2, FIELD_IDS.invoice3,
+    FIELD_IDS.invoice4, FIELD_IDS.invoice5, FIELD_IDS.invoice6,
+  ];
+
+  for (let i = 0; i < invoiceFieldNames.length; i++) {
+    const field = getCustomField(task, invoiceFieldNames[i]);
+    const parsed = parseInvoiceLabelField(field);
+    if (!parsed) continue;
+
+    // Use explicit value from tag; fall back to percentage × totalValue
+    const amount = parsed.invoiceValue > 0
+      ? parsed.invoiceValue
+      : (parsed.percentage > 0 ? totalValue * parsed.percentage : 0);
+    if (amount <= 0) continue;
+
+    invoiceMilestones.push({
+      label: `Invoice ${i + 1}`,
+      amount,
+      expectedDate: null, // Estimated by sync.ts using trigger + timing fields
+      status: parsed.status,
+      trigger: parsed.triggerKey,
+    });
+  }
+
   // Extract timing fields
   const leadtimeWeeks = getNumberValue(getCustomField(task, FIELD_IDS.leadtimeWeeks));
   const productionEta = getDateValue(getCustomField(task, FIELD_IDS.productionEta));
@@ -382,6 +558,7 @@ export async function parseTask(task: ClickUpTask): Promise<ParsedProject | null
     totalValue,
     status: statusName,
     milestones,
+    invoiceMilestones,
     quoteDate,
     leadtimeWeeks,
     productionEta,
